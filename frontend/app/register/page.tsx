@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 const STUDENT_PREFIX = "68306130";
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 
+type ToastType = "success" | "error";
+
 export default function RegisterPage() {
   const router = useRouter();
   const [role, setRole] = useState<"student" | "admin">("student");
@@ -24,14 +26,30 @@ export default function RegisterPage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [successMessage, setSuccessMessage] = useState("");
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(
+    null,
+  );
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       if (redirectTimer.current) clearTimeout(redirectTimer.current);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, []);
+
+  const showToast = (message: string, type: ToastType) => {
+    setToast({ message, type });
+
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+    }
+
+    toastTimer.current = setTimeout(() => {
+      setToast(null);
+    }, 2500);
+  };
 
   const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 10);
 
@@ -85,15 +103,8 @@ export default function RegisterPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // If we already have a generated Admin ID, we just redirect to login
-    if (role === "admin" && generatedAdminId) {
-      router.replace("/login");
-      return;
-    }
-
-    setSuccessMessage("");
     setGeneratedAdminId("");
+    setErrors((prev) => ({ ...prev, form: "" }));
 
     if (!validateForm()) return;
 
@@ -138,15 +149,13 @@ export default function RegisterPage() {
 
       if (role === "admin" && data?.adminId) {
         setGeneratedAdminId(String(data.adminId));
-        setSuccessMessage(
-          `Registration successful. Your admin ID is ${data.adminId}. Click the button below to continue to login.`,
-        );
-      } else {
-        setSuccessMessage("Registration successful. Redirecting to login...");
-        redirectTimer.current = setTimeout(() => {
-          router.replace("/login");
-        }, 1200);
       }
+
+      showToast("Register Successful!", "success");
+
+      redirectTimer.current = setTimeout(() => {
+        router.replace("/login");
+      }, 1200);
     } catch (error) {
       console.error(error);
       setErrors((prev) => ({
@@ -163,7 +172,19 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-10">
-      <div className="grid w-full max-w-6xl items-center gap-12 md:grid-cols-2">
+      {toast && (
+        <div
+          className={`fixed right-6 top-6 z-50 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-xl ${
+            toast.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <p className="text-sm font-semibold">{toast.message}</p>
+        </div>
+      )}
+
+      <div className="grid w-full max-w-6xl items-start gap-12 md:grid-cols-2">
         <div className="space-y-6">
           <p className="text-sm font-semibold tracking-[0.25em] text-blue-600 uppercase">
             Unidorm
@@ -180,7 +201,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <div className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+        <div className="self-start rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">
@@ -207,7 +228,7 @@ export default function RegisterPage() {
                 setRole("student");
                 setGeneratedAdminId("");
                 setErrors({});
-                setSuccessMessage("");
+                setToast(null);
               }}
               className={`flex-1 rounded-md py-2 text-sm font-semibold transition ${
                 role === "student"
@@ -222,7 +243,7 @@ export default function RegisterPage() {
               onClick={() => {
                 setRole("admin");
                 setErrors({});
-                setSuccessMessage("");
+                setToast(null);
               }}
               className={`flex-1 rounded-md py-2 text-sm font-semibold transition ${
                 role === "admin"
@@ -237,12 +258,6 @@ export default function RegisterPage() {
           {errors.form && (
             <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {errors.form}
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-              {successMessage}
             </div>
           )}
 
@@ -369,14 +384,11 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   readOnly
-                  value={generatedAdminId || "Auto-generated after you click the button"}
-                  className={`${inputClass} cursor-not-allowed bg-slate-50 text-slate-700 font-bold`}
+                  value={generatedAdminId || "Auto-generated after registration"}
+                  className={`${inputClass} cursor-not-allowed bg-slate-50 font-bold text-slate-700`}
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  {generatedAdminId 
-                    ? "Successfully generated! Use this ID to log in."
-                    : "Click “Get Admin ID” to create your admin account and receive the ID."
-                  }
+                  The system will assign an admin ID automatically.
                 </p>
               </div>
             )}
@@ -405,7 +417,39 @@ export default function RegisterPage() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   title={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? "📘" : "📖"}
+                  {showPassword ? (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 3l18 18" />
+                      <path d="M10.58 10.58A2 2 0 0 0 13.42 13.42" />
+                      <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c5 0 9.27 3.11 11 7-.72 1.61-1.7 3.07-2.88 4.24" />
+                      <path d="M6.61 6.61C3.91 8.29 2.17 10.67 1 12c1.73 3.89 6 7 11 7 1.31 0 2.57-.19 3.75-.53" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
 
@@ -466,7 +510,39 @@ export default function RegisterPage() {
                   }
                   title={showConfirmPassword ? "Hide password" : "Show password"}
                 >
-                  {showConfirmPassword ? "📘" : "📖"}
+                  {showConfirmPassword ? (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 3l18 18" />
+                      <path d="M10.58 10.58A2 2 0 0 0 13.42 13.42" />
+                      <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c5 0 9.27 3.11 11 7-.72 1.61-1.7 3.07-2.88 4.24" />
+                      <path d="M6.61 6.61C3.91 8.29 2.17 10.67 1 12c1.73 3.89 6 7 11 7 1.31 0 2.57-.19 3.75-.53" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
 
@@ -480,8 +556,8 @@ export default function RegisterPage() {
             <button
               type="submit"
               className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-80 ${
-                generatedAdminId 
-                  ? "bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700" 
+                generatedAdminId
+                  ? "bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700"
                   : "bg-blue-600 shadow-blue-200 hover:bg-blue-700"
               }`}
               disabled={loading}
@@ -512,7 +588,9 @@ export default function RegisterPage() {
                 {loading
                   ? "Registering..."
                   : role === "admin"
-                    ? generatedAdminId ? "Register As Admin" : "Get Admin ID"
+                    ? generatedAdminId
+                      ? "Register As Admin"
+                      : "Get Admin ID"
                     : "Register Now"}
               </span>
             </button>

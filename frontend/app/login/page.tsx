@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
+type ToastType = "success" | "error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +18,28 @@ export default function LoginPage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(
+    null,
+  );
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  const showToast = (message: string, type: ToastType) => {
+    setToast({ message, type });
+
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+    }
+
+    toastTimer.current = setTimeout(() => {
+      setToast(null);
+    }, 2500);
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -85,11 +109,15 @@ export default function LoginPage() {
         JSON.stringify(data.user),
       )}; path=/; max-age=86400`;
 
-      if (data.user?.role === "admin") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/rooms");
-      }
+      showToast("Log in successful!", "success");
+
+      setTimeout(() => {
+        if (data.user?.role === "admin") {
+          router.push("/admin/dashboard");
+        } else {
+          router.push("/rooms");
+        }
+      }, 900);
     } catch (error) {
       console.error(error);
       setErrors((prev) => ({
@@ -103,6 +131,18 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-10">
+      {toast && (
+        <div
+          className={`fixed right-6 top-6 z-50 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-xl ${
+            toast.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <p className="text-sm font-semibold">{toast.message}</p>
+        </div>
+      )}
+
       <div className="grid w-full max-w-6xl items-center gap-12 md:grid-cols-2">
         <div className="space-y-6">
           <p className="text-sm font-semibold tracking-[0.25em] text-blue-600 uppercase">
@@ -153,7 +193,7 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="flex rounded-lg bg-slate-100 p-1 mb-6">
+          <div className="mb-6 flex rounded-lg bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => {
@@ -243,7 +283,39 @@ export default function LoginPage() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   title={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? "📘" : "📖"}
+                  {showPassword ? (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 3l18 18" />
+                      <path d="M10.58 10.58A2 2 0 0 0 13.42 13.42" />
+                      <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c5 0 9.27 3.11 11 7-0.72 1.61-1.7 3.07-2.88 4.24" />
+                      <path d="M6.61 6.61C3.91 8.29 2.17 10.67 1 12c1.73 3.89 6 7 11 7 1.31 0 2.57-.19 3.75-.53" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
 

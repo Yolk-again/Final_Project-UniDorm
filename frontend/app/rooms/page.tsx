@@ -148,6 +148,15 @@ export default function StudentPage() {
     (r) => getRoomBookingStatus(r.roomNumber) !== "Available",
   );
 
+  const orderedOccupiedRooms = [...occupiedRooms].sort((a, b) => {
+    const aStatus = getRoomBookingStatus(a.roomNumber);
+    const bStatus = getRoomBookingStatus(b.roomNumber);
+
+    if (aStatus === "Your Room" && bStatus !== "Your Room") return -1;
+    if (aStatus !== "Your Room" && bStatus === "Your Room") return 1;
+    return 0;
+  });
+
   // Split active booking statuses
   const hasApprovedBooking = myBookings.some((b) => b.status === "Approved");
   const hasPendingBooking = myBookings.some((b) => b.status === "Pending");
@@ -335,7 +344,7 @@ export default function StudentPage() {
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                {occupiedRooms.map((r) => {
+                {orderedOccupiedRooms.map((r) => {
                   const roomStatus = getRoomBookingStatus(r.roomNumber);
 
                   return (
@@ -379,7 +388,7 @@ export default function StudentPage() {
                   );
                 })}
 
-                {occupiedRooms.length === 0 && (
+                {orderedOccupiedRooms.length === 0 && (
                   <p className="text-slate-400 italic">
                     No occupied rooms for your gender.
                   </p>
