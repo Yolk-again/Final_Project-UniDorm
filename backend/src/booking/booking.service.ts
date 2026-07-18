@@ -4,15 +4,14 @@
 /* eslint-disable prettier/prettier */
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { BookingStatus } from "@prisma/client";
 
 const ACTIVE_BOOKING_STATUSES = ["Pending", "Approved"] as const;
 
 function normalizeGender(value?: string | null) {
   const gender = String(value ?? "").trim().toLowerCase();
-
   if (gender === "male" || gender === "boy") return "Male";
   if (gender === "female" || gender === "girl") return "Female";
-
   return "";
 }
 
@@ -21,7 +20,9 @@ export class BookingService {
   constructor(private prisma: PrismaService) {}
 
   getBookings() {
-    return this.prisma.booking.findMany();
+    return this.prisma.booking.findMany({
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   async createBooking(data: any) {
@@ -34,10 +35,7 @@ export class BookingService {
     }
 
     const student = await this.prisma.user.findFirst({
-      where: {
-        role: "student",
-        studentId: data.studentId,
-      },
+      where: { role: "student", studentId: data.studentId },
     });
 
     if (!student) {
@@ -45,9 +43,7 @@ export class BookingService {
     }
 
     const room = await this.prisma.room.findFirst({
-      where: {
-        roomNumber: data.roomNumber,
-      },
+      where: { roomNumber: data.roomNumber },
     });
 
     if (!room) {
@@ -64,9 +60,7 @@ export class BookingService {
     const existingStudentBooking = await this.prisma.booking.findFirst({
       where: {
         studentId: data.studentId,
-        status: {
-          in: [...ACTIVE_BOOKING_STATUSES],
-        },
+        status: { in: [...ACTIVE_BOOKING_STATUSES] },
       },
     });
 
@@ -77,9 +71,7 @@ export class BookingService {
     const existingBooking = await this.prisma.booking.findFirst({
       where: {
         roomNumber: data.roomNumber,
-        status: {
-          in: [...ACTIVE_BOOKING_STATUSES],
-        },
+        status: { in: [...ACTIVE_BOOKING_STATUSES] },
       },
     });
 
@@ -93,22 +85,28 @@ export class BookingService {
         roomNumber: data.roomNumber,
         type: data.type,
         furniture: data.furniture,
-        price: data.price,
+        price: Number(data.price),
         status: "Pending",
       },
     });
   }
 
-  updateStatus(id: number, status: string) {
-    return this.prisma.booking.update({
-      where: { id },
-      data: { status },
-    });
+updateStatus(id: number, status: string) {
+  if (!["Approved", "Rejected"].includes(status)) {
+    throw new BadRequestException("Status must be Approved or Rejected");
   }
 
-  deleteBooking(id: number) {
-    return this.prisma.booking.delete({
-      where: { id },
-    });
-  }
+  const bookingStatus = status as BookingStatus;
+
+  return this.prisma.booking.update({
+    where: { id },
+    data: { status: bookingStatus },
+  });
+}
+
+deleteBooking(id: number) {
+  return this.prisma.booking.delete({
+    where: { id },
+  });
+}
 }

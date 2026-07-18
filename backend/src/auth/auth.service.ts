@@ -10,6 +10,7 @@ import * as bcrypt from "bcrypt";
 const STUDENT_PREFIX = "68306130";
 const ADMIN_ID_REGEX = /^(0[1-9]|10)$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
+const GMAIL_REGEX = /^[^\s@]+@gmail\.com$/i;
 
 function isValidStudentId(id: string) {
   return new RegExp(`^${STUDENT_PREFIX}\\d{2}$`).test(id);
@@ -17,6 +18,10 @@ function isValidStudentId(id: string) {
 
 function isValidAdminId(id: string) {
   return ADMIN_ID_REGEX.test(id);
+}
+
+function isGmail(value: string) {
+  return GMAIL_REGEX.test(String(value ?? "").trim());
 }
 
 @Injectable()
@@ -32,6 +37,14 @@ export class AuthService {
       throw new BadRequestException("Name is required");
     }
 
+    if (!data?.email?.trim()) {
+      throw new BadRequestException("Email is required");
+    }
+
+    if (!isGmail(data.email)) {
+      throw new BadRequestException("Email must be a valid @gmail.com address");
+    }
+
     if (!data?.password) {
       throw new BadRequestException("Password is required");
     }
@@ -40,6 +53,14 @@ export class AuthService {
       throw new BadRequestException(
         "Password must be at least 8 characters and include 1 lowercase letter, 1 uppercase letter, and 1 symbol",
       );
+    }
+
+    const existingEmail = await this.prisma.user.findUnique({
+      where: { email: data.email.trim().toLowerCase() },
+    });
+
+    if (existingEmail) {
+      throw new BadRequestException("This email is already registered");
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -63,19 +84,26 @@ export class AuthService {
         throw new BadRequestException("This student ID is already registered");
       }
 
-      const user = await this.prisma.user.create({
+      if (!data.gender || !["Male", "Female"].includes(data.gender)) {
+        throw new BadRequestException("Gender is required");
+      }
+
+      await this.prisma.user.create({
         data: {
           role: "student",
-          name: data.name,
-          email: data.email || null,
+          name: data.name.trim(),
+          email: data.email.trim().toLowerCase(),
           studentId: data.studentId,
           adminId: null,
-          gender: data.gender || null,
+          gender: data.gender,
           password: hashedPassword,
         },
       });
 
-      return { message: "Student registered", user };
+      return {
+        message: "Student registered successfully",
+        nextPath: "/login?role=student",
+      };
     }
 
     const existingAdmins = await this.prisma.user.findMany({
@@ -84,7 +112,7 @@ export class AuthService {
     });
 
     const usedAdminIds = new Set(
-      existingAdmins.map((admin) => admin.adminId).filter(Boolean),
+      existingAdmins.map((admin) => admin.adminId).filter(Boolean) as string[],
     );
 
     const nextAdminId = Array.from({ length: 10 }, (_, i) =>
@@ -95,11 +123,11 @@ export class AuthService {
       throw new BadRequestException("Maximum 10 admins allowed");
     }
 
-    const user = await this.prisma.user.create({
+    await this.prisma.user.create({
       data: {
         role: "admin",
-        name: data.name,
-        email: data.email || null,
+        name: data.name.trim(),
+        email: data.email.trim().toLowerCase(),
         studentId: null,
         adminId: nextAdminId,
         gender: null,
@@ -108,9 +136,9 @@ export class AuthService {
     });
 
     return {
-      message: "Admin registered",
+      message: "Admin registered successfully",
       adminId: nextAdminId,
-      user,
+      nextPath: "/login?role=admin",
     };
   }
 
@@ -145,9 +173,7 @@ export class AuthService {
       }
 
       if (!isValidAdminId(data.adminId)) {
-        throw new BadRequestException(
-          "Admin ID must be between 01 and 10",
-        );
+        throw new BadRequestException("Admin ID must be between 01 and 10");
       }
 
       user = await this.prisma.user.findFirst({
@@ -160,11 +186,14 @@ export class AuthService {
     }
 
     const isMatch = await bcrypt.compare(data.password, user.password);
-
     if (!isMatch) {
       return { message: "Invalid password" };
     }
 
-    return { message: "Login success", user };
+    return {
+      message: "Login success",
+      user,
+      redirectTo: user.role === "admin" ? "/admin/dashboard" : "/rooms",
+    };
   }
 }

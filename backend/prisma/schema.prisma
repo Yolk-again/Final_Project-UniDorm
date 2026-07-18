@@ -7,33 +7,128 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  student
+  admin
+}
+
+enum BookingStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum AnnouncementAudience {
+  ALL
+  MALE
+  FEMALE
+}
+
+enum ChatThreadType {
+  GROUP
+  DIRECT
+}
+
+enum ChatThreadStatus {
+  PENDING
+  ACCEPTED
+  DENIED
+}
+
+enum PaymentCategory {
+  ELECTRIC
+  WATER
+  ROOM
+}
+
+enum PaymentCycle {
+  MONTHLY
+  SEMESTER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String?
-  studentId String?  @unique
-  adminId   String?  @unique
-  gender    String?
-  password  String
-  role      String
-  createdAt DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  studentId  String?  @unique
+  adminId    String?  @unique
+  gender     String?
+  password   String
+  role       Role
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 }
 
 model Room {
-  id         Int     @id @default(autoincrement())
-  roomNumber String  @unique
+  id         Int      @id @default(autoincrement())
+  roomNumber String   @unique
   gender     String?
   type       String
   furniture  String
   price      Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 }
 
 model Booking {
-  id         Int    @id @default(autoincrement())
+  id         Int           @id @default(autoincrement())
   studentId  String
   roomNumber String
   type       String
   furniture  String
   price      Float
-  status     String
+  status     BookingStatus @default(Pending)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @default(now())  @updatedAt
+}
+
+model Announcement {
+  id          Int                  @id @default(autoincrement())
+  title       String
+  content     String
+  audience    AnnouncementAudience @default(ALL)
+  createdBy   String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @default(now()) @updatedAt
+}
+
+model ChatThread {
+  id           Int              @id @default(autoincrement())
+  chatKey      String           @unique
+  type         ChatThreadType
+  audienceGender String?
+  studentId    String?
+  adminId      String?
+  status       ChatThreadStatus  @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+}
+
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  chatKey    String
+  senderRole Role
+  senderId   String
+  content    String
+  createdAt  DateTime @default(now())
+}
+
+model PaymentBill {
+  id           Int            @id @default(autoincrement())
+  studentId    String
+  category     PaymentCategory
+  cycle        PaymentCycle
+  billingLabel String
+  roomNumber   String?
+  amount       Float
+  status       PaymentStatus  @default(PENDING)
+  dueDate      DateTime
+  paidAt       DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @default(now()) @updatedAt
 }

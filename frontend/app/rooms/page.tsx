@@ -390,7 +390,7 @@ export default function StudentPage() {
 
                 {orderedOccupiedRooms.length === 0 && (
                   <p className="text-slate-400 italic">
-                    No occupied rooms for your gender.
+                    No occupied rooms.
                   </p>
                 )}
               </div>
