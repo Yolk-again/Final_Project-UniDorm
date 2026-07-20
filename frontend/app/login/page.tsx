@@ -24,6 +24,14 @@ export default function LoginPage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const roleParam = searchParams.get("role");
+    if (roleParam === "student" || roleParam === "admin") {
+      setRole(roleParam);
+    }
+
     return () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };

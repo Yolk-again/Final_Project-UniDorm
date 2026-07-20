@@ -13,6 +13,9 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"student" | "admin">("student");
   const [loading, setLoading] = useState(false);
   const [generatedAdminId, setGeneratedAdminId] = useState("");
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [registeredRole, setRegisteredRole] = useState<"student" | "admin" | "">("",
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -29,8 +32,8 @@ export default function RegisterPage() {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(
     null,
   );
-  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -68,9 +71,9 @@ export default function RegisterPage() {
     if (!formData.email.trim()) {
       newErrors.email = "Please enter email address";
     } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[^\s@]+@gmail\.com$/i;
       if (!emailRegex.test(formData.email)) {
-        newErrors.email = "Please enter a valid email format";
+        newErrors.email = "Email must be a valid @gmail.com address";
       }
     }
 
@@ -151,11 +154,9 @@ export default function RegisterPage() {
         setGeneratedAdminId(String(data.adminId));
       }
 
+      setRegistrationSuccess(true);
+      setRegisteredRole(role);
       showToast("Register Successful!", "success");
-
-      redirectTimer.current = setTimeout(() => {
-        router.replace("/login");
-      }, 1200);
     } catch (error) {
       console.error(error);
       setErrors((prev) => ({
@@ -229,6 +230,14 @@ export default function RegisterPage() {
                 setGeneratedAdminId("");
                 setErrors({});
                 setToast(null);
+                setFormData({
+                  gender: "",
+                  name: "",
+                  email: "",
+                  studentId: "",
+                  password: "",
+                  confirmPassword: "",
+                });
               }}
               className={`flex-1 rounded-md py-2 text-sm font-semibold transition ${
                 role === "student"
@@ -242,8 +251,17 @@ export default function RegisterPage() {
               type="button"
               onClick={() => {
                 setRole("admin");
+                setGeneratedAdminId("");
                 setErrors({});
                 setToast(null);
+                setFormData({
+                  gender: "",
+                  name: "",
+                  email: "",
+                  studentId: "",
+                  password: "",
+                  confirmPassword: "",
+                });
               }}
               className={`flex-1 rounded-md py-2 text-sm font-semibold transition ${
                 role === "admin"
@@ -272,9 +290,9 @@ export default function RegisterPage() {
                     <input
                       type="radio"
                       name="gender"
-                      value="Boy"
+                      value="Male"
                       className="h-4 w-4"
-                      checked={formData.gender === "Boy"}
+                      checked={formData.gender === "Male"}
                       onChange={(e) =>
                         setFormData({ ...formData, gender: e.target.value })
                       }
@@ -285,9 +303,9 @@ export default function RegisterPage() {
                     <input
                       type="radio"
                       name="gender"
-                      value="Girl"
+                      value="Female"
                       className="h-4 w-4"
-                      checked={formData.gender === "Girl"}
+                      checked={formData.gender === "Female"}
                       onChange={(e) =>
                         setFormData({ ...formData, gender: e.target.value })
                       }
@@ -553,47 +571,86 @@ export default function RegisterPage() {
               )}
             </div>
 
-            <button
-              type="submit"
-              className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-80 ${
-                generatedAdminId
-                  ? "bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700"
-                  : "bg-blue-600 shadow-blue-200 hover:bg-blue-700"
-              }`}
-              disabled={loading}
-            >
-              {loading && (
-                <svg
-                  className="h-5 w-5 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
-                  />
-                </svg>
-              )}
-              <span>
-                {loading
-                  ? "Registering..."
-                  : role === "admin"
-                    ? generatedAdminId
+            {registrationSuccess ? (
+              <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-slate-900">
+                <p className="text-lg font-semibold">Registration complete!</p>
+                {role === "admin" && generatedAdminId ? (
+                  <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm text-slate-500">
+                      Your admin ID is:
+                    </p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {generatedAdminId}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Please keep it safe and use it to log in.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {registeredRole === "student" ? (
+                    <button
+                      type="button"
+                      onClick={() => router.push("/login?role=student")}
+                      className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"
+                    >
+                      Go to Student Login
+                    </button>
+                  ) : null}
+
+                  {registeredRole === "admin" ? (
+                    <button
+                      type="button"
+                      onClick={() => router.push("/login?role=admin")}
+                      className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"
+                    >
+                      Go to Admin Login
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <button
+                type="submit"
+                className={`mt-2 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-80 ${
+                  generatedAdminId
+                    ? "bg-emerald-600 shadow-emerald-200 hover:bg-emerald-700"
+                    : "bg-blue-600 shadow-blue-200 hover:bg-blue-700"
+                }`}
+                disabled={loading}
+              >
+                {loading && (
+                  <svg
+                    className="h-5 w-5 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+                    />
+                  </svg>
+                )}
+                <span>
+                  {loading
+                    ? "Registering..."
+                    : role === "admin"
                       ? "Register As Admin"
-                      : "Get Admin ID"
-                    : "Register Now"}
-              </span>
-            </button>
+                      : "Register Now"}
+                </span>
+              </button>
+            )}
 
             <div className="mt-8 border-t border-slate-200 pt-5 text-center">
               <p className="text-sm text-slate-500">

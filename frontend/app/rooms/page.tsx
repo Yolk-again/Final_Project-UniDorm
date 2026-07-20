@@ -14,6 +14,31 @@ function normalizeGender(value?: string) {
   return "";
 }
 
+function hasUnreadThread(
+  thread: any,
+  currentRole: "student" | "admin",
+  chatReadTimes: Record<string, string>,
+  selectedChatKey: string,
+  currentUserId: string,
+) {
+  if (selectedChatKey === thread.chatKey) return false;
+  if (thread.type === "DIRECT" && thread.status === "PENDING" && currentRole === "student") {
+    return true;
+  }
+  if (!thread.lastMessage) return false;
+  if (
+    thread.lastMessage.senderRole === currentRole &&
+    thread.lastMessage.senderId === currentUserId
+  ) {
+    return false;
+  }
+
+  const lastRead = chatReadTimes[thread.chatKey];
+  if (!lastRead) return true;
+
+  return new Date(thread.lastMessage.createdAt) > new Date(lastRead);
+}
+
 function safeParseUser(raw: string | null) {
   if (!raw) return null;
 
@@ -28,9 +53,20 @@ function safeParseUser(raw: string | null) {
 export default function StudentPage() {
   const router = useRouter();
   const [rooms, setRooms] = useState<any[]>([]);
-  const [view, setView] = useState<"available" | "my">("available");
+  const [view, setView] = useState<"available" | "my" | "announcements" | "payments" | "chat">("available");
   const [myBookings, setMyBookings] = useState<any[]>([]);
   const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [bills, setBills] = useState<any[]>([]);
+  const [chatThreads, setChatThreads] = useState<any[]>([]);
+  const [selectedChatKey, setSelectedChatKey] = useState("");
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [chatError, setChatError] = useState("");
+  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false);
+  const [chatsLoaded, setChatsLoaded] = useState(false);
+  const [chatReadTimes, setChatReadTimes] = useState<Record<string, string>>({});
+  const [announcementReadIds, setAnnouncementReadIds] = useState<number[]>([]);
   const [studentId, setStudentId] = useState("");
   const [studentName, setStudentName] = useState("");
   const [studentGender, setStudentGender] = useState<"Male" | "Female" | "">(
@@ -85,6 +121,54 @@ export default function StudentPage() {
     );
   }, [hiddenBookingIds, studentId]);
 
+  useEffect(() => {
+    if (!studentId) return;
+
+    const storedReadTimes = localStorage.getItem(
+      `chatReadTimes_student_${studentId}`,
+    );
+    if (storedReadTimes) {
+      try {
+        const parsed = JSON.parse(storedReadTimes);
+        if (parsed && typeof parsed === "object") {
+          setChatReadTimes(parsed as Record<string, string>);
+        }
+      } catch {
+        setChatReadTimes({});
+      }
+    }
+
+    const announcementRead = localStorage.getItem(
+      `announcementReadIds_student_${studentId}`,
+    );
+    if (announcementRead) {
+      try {
+        const parsed = JSON.parse(announcementRead);
+        if (Array.isArray(parsed)) {
+          setAnnouncementReadIds(parsed as number[]);
+        }
+      } catch {
+        setAnnouncementReadIds([]);
+      }
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    localStorage.setItem(
+      `chatReadTimes_student_${studentId}`,
+      JSON.stringify(chatReadTimes),
+    );
+  }, [chatReadTimes, studentId]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    localStorage.setItem(
+      `announcementReadIds_student_${studentId}`,
+      JSON.stringify(announcementReadIds),
+    );
+  }, [announcementReadIds, studentId]);
+
   const fetchRooms = async () => {
     try {
       const res = await fetch("http://localhost:3001/rooms");
@@ -111,6 +195,9 @@ export default function StudentPage() {
 
     fetchRooms();
     fetchBookings(studentId);
+    fetchAnnouncements();
+    fetchBills(studentId);
+    fetchChatThreads();
   }, [authChecked, studentId]);
 
   const getRoomBookingStatus = (roomNumber: string) => {
@@ -202,6 +289,166 @@ export default function StudentPage() {
     (b) => !hiddenBookingIds.includes(b.id),
   );
 
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await fetch("http://localhost:3001/announcements");
+      const data = await res.json();
+      const normalizedGender = studentGender.toUpperCase();
+      const filtered = Array.isArray(data)
+        ? data.filter((announcement: any) =>
+            announcement.audience === "ALL" ||
+            announcement.audience === normalizedGender,
+          )
+        : [];
+      setAnnouncements(filtered);
+      setAnnouncementsLoaded(true);
+    } catch (error) {
+      console.error("Failed to fetch announcements:", error);
+    }
+  };
+
+  const fetchBills = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:3001/payments/${id}`);
+      const data = await res.json();
+      setBills(data);
+    } catch (error) {
+      console.error("Failed to fetch bills:", error);
+    }
+  };
+
+  const fetchChatThreads = async () => {
+    try {
+      const res = await fetch("http://localhost:3001/chat/threads");
+      const data = await res.json();
+      setChatThreads(data);
+      setChatsLoaded(true);
+    } catch (error) {
+      console.error("Failed to fetch chat threads:", error);
+    }
+  };
+
+  const fetchChatMessages = async (chatKey: string) => {
+    try {
+      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/messages`);
+      const data = await res.json();
+      setChatMessages(data);
+      setSelectedChatKey(chatKey);
+      setChatReadTimes((prev) => ({
+        ...prev,
+        [chatKey]: new Date().toISOString(),
+      }));
+    } catch (error) {
+      console.error("Failed to fetch chat messages:", error);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!selectedChatKey || !newMessage.trim()) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:3001/chat/threads/${selectedChatKey}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: newMessage.trim(),
+          senderRole: "student",
+          senderId: studentId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setChatError(data.message || "Failed to send message");
+        return;
+      }
+
+      setNewMessage("");
+      await fetchChatMessages(selectedChatKey);
+    } catch (error) {
+      console.error(error);
+      setChatError("Failed to send message");
+    }
+  };
+
+  const handleRespondRequest = async (chatKey: string, action: "accept" | "deny") => {
+    try {
+      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/respond`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.message || "Failed to respond to request");
+        return;
+      }
+      await fetchChatThreads();
+      if (selectedChatKey === chatKey) {
+        await fetchChatMessages(chatKey);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to respond to request");
+    }
+  };
+
+  const handleDeleteBooking = async (bookingId: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/bookings/${bookingId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.message || "Failed to delete booking");
+        return;
+      }
+      await fetchBookings(studentId);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete booking");
+    }
+  };
+  useEffect(() => {
+    if (view !== "announcements") return;
+    const unreadIds = announcements
+      .filter((announcement) => !announcementReadIds.includes(announcement.id))
+      .map((announcement) => announcement.id);
+
+    if (unreadIds.length === 0) return;
+
+    setAnnouncementReadIds((prev) => Array.from(new Set([...prev, ...unreadIds])));
+  }, [view, announcements, announcementReadIds]);
+  const handlePayBill = async (billId: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/payments/${billId}/pay`, {
+        method: "PATCH",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.message || "Failed to pay bill");
+        return;
+      }
+      fetchBills(studentId);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to pay bill");
+    }
+  };
+
+  const announcementNotification = announcementsLoaded && announcements.some(
+    (announcement) => !announcementReadIds.includes(announcement.id),
+  );
+
+  const chatNotification = chatsLoaded && chatThreads.some((thread) =>
+    (thread.type === "GROUP"
+      ? thread.audienceGender === studentGender
+      : thread.studentId === studentId) &&
+    hasUnreadThread(thread, "student", chatReadTimes, selectedChatKey, studentId),
+  );
+
   const handleLogout = () => {
     sessionStorage.removeItem("loggedInUser");
     sessionStorage.removeItem("loggedInRole");
@@ -259,6 +506,52 @@ export default function StudentPage() {
                 }`}
               >
                 My Bookings
+              </button>
+              <button
+                onClick={() => setView("announcements")}
+                aria-label="View announcements"
+                className={`relative rounded-md px-4 py-2 text-sm font-semibold transition ${
+                  view === "announcements"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600"
+                }`}
+              >
+                Announcements
+                {announcementNotification && view !== "announcements" && (
+                  <span
+                    role="status"
+                    aria-label="New announcement"
+                    className="absolute right-2 top-2 inline-flex h-2.5 w-2.5 rounded-full bg-red-500"
+                  />
+                )}
+              </button>
+              <button
+                onClick={() => setView("payments")}
+                className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                  view === "payments"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600"
+                }`}
+              >
+                Payments
+              </button>
+              <button
+                onClick={() => setView("chat")}
+                aria-label="View chat"
+                className={`relative rounded-md px-4 py-2 text-sm font-semibold transition ${
+                  view === "chat"
+                    ? "bg-white text-blue-600 shadow-sm"
+                    : "text-slate-600"
+                }`}
+              >
+                Chat
+                {chatNotification && view !== "chat" && (
+                  <span
+                    role="status"
+                    aria-label="New chat message"
+                    className="absolute right-2 top-2 inline-flex h-2.5 w-2.5 rounded-full bg-red-500"
+                  />
+                )}
               </button>
             </div>
 
@@ -396,14 +689,14 @@ export default function StudentPage() {
               </div>
             </section>
           </div>
-        ) : (
+        ) : view === "my" ? (
           <div className="rounded-[2rem] border border-white/60 bg-white/80 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
             <div className="mb-4">
               <h2 className="text-2xl font-bold text-slate-900">
                 My Bookings
               </h2>
               <p className="text-sm text-slate-500">
-                Track your booking requests and statuses
+                Track your booking requests and statuses.
               </p>
             </div>
 
@@ -418,34 +711,33 @@ export default function StudentPage() {
                       Room {b.roomNumber}
                     </p>
                     <p className="text-sm text-slate-500">
-                      {b.type} • {b.furniture} •{" "}
-                      {Number(b.price).toLocaleString()} THB
+                      {b.type} • {b.furniture} • {Number(b.price).toLocaleString()} THB
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-bold ${
-                        b.status === "Approved"
-                          ? "bg-green-100 text-green-700"
-                          : b.status === "Rejected"
+                    {b.status !== "Approved" ? (
+                      <span
+                        className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-bold ${
+                          b.status === "Rejected"
                             ? "bg-red-100 text-red-700"
                             : "bg-amber-100 text-amber-700"
-                      }`}
-                    >
-                      {b.status}
-                    </span>
+                        }`}
+                      >
+                        {b.status}
+                      </span>
+                    ) : null}
 
-                    {(b.status === "Approved" || b.status === "Rejected") && (
+                    {b.status === "Rejected" ? (
                       <button
-                        onClick={() => handleHideBooking(b)}
+                        onClick={() => handleDeleteBooking(b.id)}
                         className="grid h-8 w-8 place-items-center rounded-full bg-red-100 text-sm font-bold text-red-600 transition hover:bg-red-200 hover:text-red-700"
-                        aria-label="Hide booking"
-                        title="Hide booking"
+                        aria-label="Delete booking"
+                        title="Delete booking"
                       >
                         ×
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -454,6 +746,262 @@ export default function StudentPage() {
                 <p className="text-slate-400 italic">No bookings yet.</p>
               )}
             </div>
+          </div>
+        ) : view === "announcements" ? (
+          <div className="space-y-6">
+            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+              <div className="mb-5">
+                <h2 className="text-2xl font-bold text-slate-900">Announcements</h2>
+                <p className="text-sm text-slate-500">
+                  See the latest dorm news and updates.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {announcements.map((announcement) => (
+                  <div
+                    key={announcement.id}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-bold text-slate-900">
+                          {announcement.title}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {announcement.audience === "ALL" ? "All Residents" : `${announcement.audience} Residents`}
+                        </p>
+                      </div>
+                      <p className="text-sm text-slate-500">
+                        {new Date(announcement.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <p className="mt-4 text-sm text-slate-600">{announcement.content}</p>
+                  </div>
+                ))}
+
+                {announcements.length === 0 && (
+                  <p className="text-slate-400 italic">No announcements yet.</p>
+                )}
+              </div>
+            </section>
+          </div>
+        ) : view === "payments" ? (
+          <div className="space-y-6">
+            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+              <div className="mb-5">
+                <h2 className="text-2xl font-bold text-slate-900">Your Bills</h2>
+                <p className="text-sm text-slate-500">
+                  Pay monthly electric, water, and semester room bills.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {bills.map((bill) => (
+                  <div
+                    key={bill.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-lg font-bold text-slate-900">{bill.billingLabel}</p>
+                        <p className="text-sm text-slate-500">
+                          {bill.category} • {bill.cycle} • Due {new Date(bill.dueDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="text-lg font-semibold text-blue-600">
+                          {Number(bill.amount).toLocaleString()} THB
+                        </p>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            bill.status === "PAID"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {bill.status}
+                        </span>
+                        {bill.status === "PENDING" ? (
+                          <button
+                            onClick={() => handlePayBill(bill.id)}
+                            className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                          >
+                            Pay Now
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {bills.length === 0 && (
+                  <p className="text-slate-400 italic">No bills available at the moment.</p>
+                )}
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+              <div className="mb-5">
+                <h2 className="text-2xl font-bold text-slate-900">Messages</h2>
+                <p className="text-sm text-slate-500">
+                  Join group chats or respond to direct admin requests.
+                </p>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-600">Chats</p>
+                    <div className="mt-3 space-y-3">
+                      {chatThreads
+                        .filter((thread) =>
+                          thread.type === "GROUP"
+                            ? thread.audienceGender === studentGender
+                            : thread.studentId === studentId,
+                        )
+                        .map((thread) => (
+                          <button
+                            key={thread.chatKey}
+                            type="button"
+                            onClick={() => fetchChatMessages(thread.chatKey)}
+                            className={`relative block w-full rounded-2xl border px-4 py-3 text-left transition ${
+                              selectedChatKey === thread.chatKey
+                                ? "border-blue-600 bg-white shadow-sm"
+                                : "border-transparent bg-white/80 hover:border-slate-300"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-slate-900">
+                                  {thread.type === "GROUP"
+                                    ? `${thread.audienceGender} Group`
+                                    : `Admin Request`}
+                                </p>
+                                {thread.type === "DIRECT" && (
+                                  <>
+                                    <p className="text-xs text-slate-500">
+                                      {thread.status === "PENDING"
+                                        ? "Direct request pending"
+                                        : thread.status === "DENIED"
+                                          ? "Request denied"
+                                          : "Direct chat"}
+                                    </p>
+                                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">
+                                      {thread.status}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {hasUnreadThread(thread, "student", chatReadTimes, selectedChatKey) && (
+                              <span className="absolute right-4 top-4 h-3.5 w-3.5 rounded-full bg-red-500 ring-2 ring-white" />
+                            )}
+                          </button>
+                        ))}
+                      {chatThreads.filter((thread) =>
+                        thread.type === "GROUP"
+                          ? thread.audienceGender === studentGender
+                          : thread.studentId === studentId,
+                      ).length === 0 && (
+                        <p className="text-sm text-slate-400">No chats yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  {selectedChatKey ? (
+                    <>
+                      <div className="mb-4 flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-lg font-semibold text-slate-900">
+                            {chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.type === "GROUP"
+                              ? `${chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.audienceGender} Group Chat`
+                              : "Admin Direct Request"}
+                          </p>
+                          {chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.type === "DIRECT" && (
+                            <p className="text-sm text-slate-500">
+                              {chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.status}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mb-4 max-h-[420px] space-y-3 overflow-y-auto pr-2">
+                        {chatMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`rounded-2xl p-4 ${
+                              msg.senderRole === "student"
+                                ? "bg-blue-50 text-slate-900 self-end"
+                                : "bg-slate-100 text-slate-900"
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">
+                              {msg.senderRole === "student"
+                                ? msg.senderId
+                                : `Admin - ${msg.senderId}`}
+                            </p>
+                            <p className="mt-2 text-sm leading-6">{msg.content}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {chatError && (
+                        <p className="mb-4 rounded-2xl bg-red-50 p-3 text-sm text-red-700">
+                          {chatError}
+                        </p>
+                      )}
+
+                      {chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.type === "DIRECT" &&
+                      chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.status === "PENDING" ? (
+                        <div className="flex flex-col gap-3">
+                          <p className="text-sm text-slate-600">
+                            You have a pending chat request. Accept to continue or deny to cancel.
+                          </p>
+                          <div className="flex flex-wrap gap-3">
+                            <button
+                              onClick={() => handleRespondRequest(selectedChatKey, "accept")}
+                              className="rounded-2xl bg-green-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-green-700"
+                            >
+                              Accept Request
+                            </button>
+                            <button
+                              onClick={() => handleRespondRequest(selectedChatKey, "deny")}
+                              className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+                            >
+                              Deny Request
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 flex gap-3">
+                          <input
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                            placeholder="Type a message..."
+                          />
+                          <button
+                            onClick={handleSendMessage}
+                            className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                          >
+                            Send
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-slate-500">
+                      Select a chat thread to view or reply.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
           </div>
         )}
       </div>
