@@ -112,25 +112,39 @@ export class BookingService {
       throw new BadRequestException("Status must be Approved or Rejected");
     }
 
-    const booking = await this.prisma.booking.findUnique({ where: { id } });
-    if (!booking) throw new NotFoundException("Booking not found");
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const booking = await tx.booking.findUnique({ where: { id } });
+          if (!booking) throw new NotFoundException("Booking not found");
 
-    if (status === "Approved") {
-      const occupied = await this.prisma.booking.findFirst({
-        where: {
-          roomNumber: booking.roomNumber,
-          status: { in: [...ACTIVE_BOOKING_STATUSES] },
-          NOT: { id },
+          if (status === "Approved") {
+            const occupied = await tx.booking.findFirst({
+              where: {
+                roomNumber: booking.roomNumber,
+                status: { in: [...ACTIVE_BOOKING_STATUSES] },
+                NOT: { id },
+              },
+            });
+
+            if (occupied) {
+              throw new BadRequestException("This room already has an active booking");
+            }
+          }
+
+          return tx.booking.update({
+            where: { id },
+            data: { status: status as BookingStatus },
+          });
         },
-      });
-
-      if (occupied) throw new BadRequestException("This room is already occupied");
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if ((error as { code?: string })?.code === "P2034") {
+        throw new BadRequestException("Another booking update happened at the same time. Refresh and try again");
+      }
+      throw error;
     }
-
-    return this.prisma.booking.update({
-      where: { id },
-      data: { status: status as BookingStatus },
-    });
   }
 
   async deleteBooking(id: number, user: AuthenticatedUser) {

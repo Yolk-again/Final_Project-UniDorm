@@ -549,7 +549,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-8 text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-6 md:flex-row md:items-center md:justify-between">
           <div>
@@ -602,7 +602,7 @@ export default function AdminDashboard() {
 
         {adminView === "rooms" && (
           <div className="grid gap-8 lg:grid-cols-3">
-            <div className="h-fit rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <div className="h-fit rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] sm:p-8 backdrop-blur-xl">
             <h2 className="mb-2 text-2xl font-bold text-slate-900">
               {isEditing ? "Edit Room" : "Add New Room"}
             </h2>
