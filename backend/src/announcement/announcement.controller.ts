@@ -1,18 +1,25 @@
-/* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body } from "@nestjs/common";
+import { Body, Controller, Get, Post, Req } from "@nestjs/common";
+import { AuthenticatedUser, Roles } from "../auth/auth.guard";
 import { AnnouncementService } from "./announcement.service";
+
+type RequestWithUser = { user: AuthenticatedUser };
 
 @Controller("announcements")
 export class AnnouncementController {
-  constructor(private announcementService: AnnouncementService) {}
+  constructor(private readonly announcementService: AnnouncementService) {}
 
   @Get()
-  getAnnouncements() {
-    return this.announcementService.getAnnouncements();
+  @Roles("student", "admin")
+  getAnnouncements(@Req() request: RequestWithUser) {
+    return this.announcementService.getAnnouncements(request.user);
   }
 
   @Post()
-  createAnnouncement(@Body() body: any) {
-    return this.announcementService.createAnnouncement(body);
+  @Roles("admin")
+  createAnnouncement(@Req() request: RequestWithUser, @Body() body: any) {
+    return this.announcementService.createAnnouncement({
+      ...body,
+      createdBy: request.user.adminId ?? "admin",
+    });
   }
 }

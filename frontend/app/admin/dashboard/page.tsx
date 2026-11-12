@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "../../lib/api";
 
 function hasUnreadThread(
   thread: any,
@@ -89,8 +90,9 @@ export default function AdminDashboard() {
     const role =
       sessionStorage.getItem("loggedInRole") ||
       localStorage.getItem("loggedInRole");
+    const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
 
-    if (!role || role !== "admin") {
+    if (!token || !role || role !== "admin" || !adminId) {
       router.replace("/login");
       return;
     }
@@ -158,11 +160,11 @@ export default function AdminDashboard() {
     try {
       await ensureGroupChats();
 
-      const roomsRes = await fetch("http://localhost:3001/rooms");
-      const bookingsRes = await fetch("http://localhost:3001/bookings");
-      const announcementsRes = await fetch("http://localhost:3001/announcements");
-      const chatRes = await fetch("http://localhost:3001/chat/threads");
-      const billRes = await fetch("http://localhost:3001/payments");
+      const roomsRes = await apiFetch("/rooms");
+      const bookingsRes = await apiFetch("/bookings");
+      const announcementsRes = await apiFetch("/announcements");
+      const chatRes = await apiFetch("/chat/threads");
+      const billRes = await apiFetch("/payments");
 
       const roomsData = await roomsRes.json();
       const bookingsData = await bookingsRes.json();
@@ -211,8 +213,8 @@ export default function AdminDashboard() {
       let finalRoomNumber = "";
 
       if (isEditing && editId) {
-        const existingRoom = roomList.find(r => r.id === editId);
-        finalRoomNumber = existingRoom?.roomNumber;
+        const existingRoom = roomList.find((room) => room.id === editId);
+        finalRoomNumber = existingRoom?.roomNumber ?? "";
       } else {
         finalRoomNumber = generateRoomNumber(formData.gender);
       }
@@ -225,18 +227,22 @@ export default function AdminDashboard() {
         price: Number(formData.price),
       };
 
-      if (isEditing && editId) {
-        await fetch(`http://localhost:3001/rooms/${editId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch("http://localhost:3001/rooms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const response =
+        isEditing && editId
+          ? await apiFetch(`/rooms/${editId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            })
+          : await apiFetch("/rooms", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to save room");
       }
 
       setIsEditing(false);
@@ -251,10 +257,13 @@ export default function AdminDashboard() {
       await refresh();
     } catch (error) {
       console.error("Failed to save room:", error);
+      alert(error instanceof Error ? error.message : "Failed to save room");
     }
   };
 
   const handleLogout = () => {
+    sessionStorage.removeItem("accessToken");
+    localStorage.removeItem("accessToken");
     sessionStorage.removeItem("loggedInUser");
     sessionStorage.removeItem("loggedInRole");
     localStorage.removeItem("loggedInUser");
@@ -264,7 +273,7 @@ export default function AdminDashboard() {
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/messages`);
+      const res = await apiFetch(`/chat/threads/${chatKey}/messages`);
       const data = await res.json();
       setChatMessages(data);
       setSelectedChatKey(chatKey);
@@ -286,7 +295,7 @@ export default function AdminDashboard() {
         console.error("Missing admin ID for group chat creation");
         return;
       }
-      const res = await fetch("http://localhost:3001/chat/threads", {
+      const res = await apiFetch("/chat/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -331,7 +340,7 @@ export default function AdminDashboard() {
         console.error("Missing admin ID for direct chat request");
         return;
       }
-      const res = await fetch("http://localhost:3001/chat/threads", {
+      const res = await apiFetch("/chat/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -345,7 +354,7 @@ export default function AdminDashboard() {
       setChatThreads((prev) => [thread, ...prev.filter((t) => t.chatKey !== thread.chatKey)]);
       setSelectedChatKey(thread.chatKey);
       if (firstChatMessage.trim()) {
-        await fetch(`http://localhost:3001/chat/threads/${thread.chatKey}/messages`, {
+        await apiFetch(`/chat/threads/${thread.chatKey}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -369,7 +378,7 @@ export default function AdminDashboard() {
           "null",
       );
 
-      const res = await fetch("http://localhost:3001/announcements", {
+      const res = await apiFetch("/announcements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -388,7 +397,7 @@ export default function AdminDashboard() {
 
   const createBill = async () => {
     try {
-      const res = await fetch("http://localhost:3001/payments", {
+      const res = await apiFetch("/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
@@ -424,7 +433,7 @@ export default function AdminDashboard() {
         return;
       }
 
-      const res = await fetch(`http://localhost:3001/chat/threads/${selectedChatKey}/messages`, {
+      const res = await apiFetch(`/chat/threads/${selectedChatKey}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -449,7 +458,7 @@ export default function AdminDashboard() {
 
   const deleteChatThread = async (chatKey: string) => {
     try {
-      await fetch(`http://localhost:3001/chat/threads/${chatKey}`, {
+      await apiFetch(`/chat/threads/${chatKey}`, {
         method: "DELETE",
       });
       setChatThreads((prev) => prev.filter((thread) => thread.chatKey !== chatKey));
@@ -510,21 +519,26 @@ export default function AdminDashboard() {
         }
       }
 
-      await fetch(`http://localhost:3001/bookings/${booking.id}`, {
+      const response = await apiFetch(`/bookings/${booking.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to update booking");
+      }
 
       await refresh();
     } catch (error) {
       console.error("Failed to update booking:", error);
+      alert(error instanceof Error ? error.message : "Failed to update booking");
     }
   };
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-8 text-slate-900">
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
         <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center">
           <div className="rounded-2xl border border-white/60 bg-white/80 px-6 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
             Loading...
@@ -537,7 +551,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-8 text-slate-900">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/60 bg-white/80 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+        <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold tracking-[0.35em] text-blue-600 uppercase">
               Unidorm
@@ -558,7 +572,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <div className="mb-8 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+        <div className="mb-8 rounded-[2rem] border border-white/60 bg-white/80 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-4">
           <div className="flex flex-wrap gap-3">
             {[
               { key: "rooms", label: "Rooms" },
@@ -765,13 +779,18 @@ export default function AdminDashboard() {
                               if (!confirm("Delete this room?")) return;
 
                               try {
-                                await fetch(
-                                  `http://localhost:3001/rooms/${r.id}`,
+                                const response = await apiFetch(
+                                  `/rooms/${r.id}`,
                                   { method: "DELETE" }
                                 );
-                                refresh();
+                                const result = await response.json().catch(() => ({}));
+                                if (!response.ok) {
+                                  throw new Error(result.message || "Failed to delete room");
+                                }
+                                await refresh();
                               } catch (error) {
                                 console.error("Failed to delete room:", error);
+                                alert(error instanceof Error ? error.message : "Failed to delete room");
                               }
                             }}
                             disabled={locked}

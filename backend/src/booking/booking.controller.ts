@@ -1,30 +1,46 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Param, Put, Delete } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+} from "@nestjs/common";
+import { AuthenticatedUser, Roles } from "../auth/auth.guard";
 import { BookingService } from "./booking.service";
+
+type RequestWithUser = { user: AuthenticatedUser };
 
 @Controller("bookings")
 export class BookingController {
-  constructor(private bookingService: BookingService) {}
+  constructor(private readonly bookingService: BookingService) {}
 
   @Get()
-  getBookings() {
-    return this.bookingService.getBookings();
+  @Roles("student", "admin")
+  getBookings(@Req() request: RequestWithUser) {
+    return this.bookingService.getBookings(request.user);
   }
 
   @Post()
-  createBooking(@Body() data: any) {
-    return this.bookingService.createBooking(data);
+  @Roles("student")
+  createBooking(@Req() request: RequestWithUser, @Body() data: any) {
+    return this.bookingService.createBooking({
+      ...data,
+      studentId: request.user.studentId,
+    });
   }
 
   @Put(":id")
+  @Roles("admin")
   updateStatus(@Param("id") id: string, @Body() body: any) {
     return this.bookingService.updateStatus(Number(id), body.status);
   }
 
   @Delete(":id")
-  deleteBooking(@Param("id") id: string) {
-    return this.bookingService.deleteBooking(Number(id));
+  @Roles("student", "admin")
+  deleteBooking(@Req() request: RequestWithUser, @Param("id") id: string) {
+    return this.bookingService.deleteBooking(Number(id), request.user);
   }
 }

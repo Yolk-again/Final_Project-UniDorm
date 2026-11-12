@@ -1,0 +1,92 @@
+name: UniDorm CI
+
+on:
+  push:
+    branches: ["main", "revival/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: unidorm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d unidorm"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/unidorm?schema=public
+      JWT_SECRET: ci-only-secret-with-more-than-32-characters
+      ADMIN_REGISTRATION_KEY: ci-only-admin-registration-key
+      FRONTEND_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run build
+      - run: npm test -- --runInBand
+      - run: npm run test:e2e -- --runInBand
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload complete source project
+        uses: actions/upload-artifact@v4
+        with:
+          name: UniDorm-revival-project
+          path: |
+            backend/
+            frontend/
+            db/
+            README.md
+            .gitignore
+            .github/
+            !backend/node_modules/**
+            !frontend/node_modules/**
+            !frontend/.next/**
+            !backend/dist/**
+            !frontend/dist/**
+            !backend/coverage/**
+            !frontend/coverage/**
+            !backend/.env
+            !frontend/.env.local
+          if-no-files-found: error
+          retention-days: 14

@@ -1,10 +1,11 @@
-/* eslint-disable prettier/prettier */
-import { Controller, Post, Body } from "@nestjs/common";
+import { Body, Controller, Post } from "@nestjs/common";
 import { AuthService } from "./auth.service";
+import { Public } from "./auth.guard";
 
+@Public()
 @Controller("auth")
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post("register")
   register(@Body() body: any) {

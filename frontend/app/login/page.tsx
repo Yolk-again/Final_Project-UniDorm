@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "../lib/api";
 
 type ToastType = "success" | "error";
 
@@ -88,7 +89,7 @@ export default function LoginPage() {
               password: formData.password,
             };
 
-      const res = await fetch("http://localhost:3001/auth/login", {
+      const res = await apiFetch("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -98,8 +99,8 @@ export default function LoginPage() {
 
       if (
         !res.ok ||
-        data.message === "User not found" ||
-        data.message === "Invalid password"
+        !data.accessToken ||
+        !data.user
       ) {
         setErrors((prev) => ({
           ...prev,
@@ -109,13 +110,13 @@ export default function LoginPage() {
       }
 
       localStorage.setItem("loggedInUser", JSON.stringify(data.user));
+      localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("loggedInRole", data.user.role);
       sessionStorage.setItem("loggedInUser", JSON.stringify(data.user));
+      sessionStorage.setItem("accessToken", data.accessToken);
       sessionStorage.setItem("loggedInRole", data.user.role);
 
-      document.cookie = `user=${encodeURIComponent(
-        JSON.stringify(data.user),
-      )}; path=/; max-age=86400`;
+      
 
       showToast("Log in successful!", "success");
 
@@ -138,7 +139,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-10">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-8 sm:px-6 sm:py-10">
       {toast && (
         <div
           className={`fixed right-6 top-6 z-50 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-xl ${
@@ -183,7 +184,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+        <div className="rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] sm:p-8 backdrop-blur-xl">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">Login</h2>

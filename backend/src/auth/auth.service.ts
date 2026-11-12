@@ -1,9 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable prettier/prettier */
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import * as bcrypt from "bcrypt";
 
@@ -26,7 +27,10 @@ function isGmail(value: string) {
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async register(data: any) {
     if (!data?.role || !["student", "admin"].includes(data.role)) {
@@ -37,63 +41,59 @@ export class AuthService {
       throw new BadRequestException("Name is required");
     }
 
-    if (!data?.email?.trim()) {
-      throw new BadRequestException("Email is required");
-    }
-
-    if (!isGmail(data.email)) {
+    if (!data?.email?.trim() || !isGmail(data.email)) {
       throw new BadRequestException("Email must be a valid @gmail.com address");
     }
 
-    if (!data?.password) {
-      throw new BadRequestException("Password is required");
-    }
-
-    if (!PASSWORD_REGEX.test(data.password)) {
+    if (!data?.password || !PASSWORD_REGEX.test(data.password)) {
       throw new BadRequestException(
         "Password must be at least 8 characters and include 1 lowercase letter, 1 uppercase letter, and 1 symbol",
       );
     }
 
-    const existingEmail = await this.prisma.user.findUnique({
-      where: { email: data.email.trim().toLowerCase() },
-    });
+    if (data.role === "admin") {
+      const registrationKey = process.env.ADMIN_REGISTRATION_KEY;
+      if (!registrationKey || data.registrationKey !== registrationKey) {
+        throw new ForbiddenException("Admin registration requires a valid registration key");
+      }
+    }
+
+    const email = data.email.trim().toLowerCase();
+    const existingEmail = await this.prisma.user.findUnique({ where: { email } });
 
     if (existingEmail) {
       throw new BadRequestException("This email is already registered");
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const hashedPassword = await bcrypt.hash(data.password, 12);
 
     if (data.role === "student") {
-      if (!data.studentId) {
-        throw new BadRequestException("Student ID is required");
-      }
+      const studentId = String(data.studentId ?? "").trim();
 
-      if (!isValidStudentId(data.studentId)) {
+      if (!isValidStudentId(studentId)) {
         throw new BadRequestException(
           `Student ID must start with ${STUDENT_PREFIX} and end with exactly 2 digits`,
         );
-      }
-
-      const existingStudent = await this.prisma.user.findFirst({
-        where: { role: "student", studentId: data.studentId },
-      });
-
-      if (existingStudent) {
-        throw new BadRequestException("This student ID is already registered");
       }
 
       if (!data.gender || !["Male", "Female"].includes(data.gender)) {
         throw new BadRequestException("Gender is required");
       }
 
+      const existingStudent = await this.prisma.user.findUnique({
+        where: { studentId },
+      });
+
+      if (existingStudent) {
+        throw new BadRequestException("This student ID is already registered");
+      }
+
       await this.prisma.user.create({
         data: {
           role: "student",
           name: data.name.trim(),
-          email: data.email.trim().toLowerCase(),
-          studentId: data.studentId,
+          email,
+          studentId,
           adminId: null,
           gender: data.gender,
           password: hashedPassword,
@@ -115,8 +115,8 @@ export class AuthService {
       existingAdmins.map((admin) => admin.adminId).filter(Boolean) as string[],
     );
 
-    const nextAdminId = Array.from({ length: 10 }, (_, i) =>
-      String(i + 1).padStart(2, "0"),
+    const nextAdminId = Array.from({ length: 10 }, (_, index) =>
+      String(index + 1).padStart(2, "0"),
     ).find((id) => !usedAdminIds.has(id));
 
     if (!nextAdminId) {
@@ -127,7 +127,7 @@ export class AuthService {
       data: {
         role: "admin",
         name: data.name.trim(),
-        email: data.email.trim().toLowerCase(),
+        email,
         studentId: null,
         adminId: nextAdminId,
         gender: null,
@@ -154,45 +154,56 @@ export class AuthService {
     let user;
 
     if (data.role === "student") {
-      if (!data.studentId) {
-        throw new BadRequestException("Student ID is required");
-      }
+      const studentId = String(data.studentId ?? "").trim();
 
-      if (!isValidStudentId(data.studentId)) {
+      if (!isValidStudentId(studentId)) {
         throw new BadRequestException(
           `Student ID must start with ${STUDENT_PREFIX} and end with exactly 2 digits`,
         );
       }
 
       user = await this.prisma.user.findFirst({
-        where: { role: "student", studentId: data.studentId },
+        where: { role: "student", studentId },
       });
     } else {
-      if (!data.adminId) {
-        throw new BadRequestException("Admin ID is required");
-      }
+      const adminId = String(data.adminId ?? "").trim();
 
-      if (!isValidAdminId(data.adminId)) {
+      if (!isValidAdminId(adminId)) {
         throw new BadRequestException("Admin ID must be between 01 and 10");
       }
 
       user = await this.prisma.user.findFirst({
-        where: { role: "admin", adminId: data.adminId },
+        where: { role: "admin", adminId },
       });
     }
 
-    if (!user) {
-      return { message: "User not found" };
+    if (!user || !(await bcrypt.compare(data.password, user.password))) {
+      throw new UnauthorizedException("Invalid login credentials");
     }
 
-    const isMatch = await bcrypt.compare(data.password, user.password);
-    if (!isMatch) {
-      return { message: "Invalid password" };
-    }
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      studentId: user.studentId,
+      adminId: user.adminId,
+      gender: user.gender,
+      role: user.role,
+    };
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      role: user.role,
+      studentId: user.studentId,
+      adminId: user.adminId,
+      gender: user.gender,
+    });
 
     return {
       message: "Login success",
-      user,
+      user: safeUser,
+      accessToken,
+      expiresIn: "8h",
       redirectTo: user.role === "admin" ? "/admin/dashboard" : "/rooms",
     };
   }

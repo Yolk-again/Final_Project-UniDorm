@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "../lib/api";
 
 function normalizeGender(value?: string) {
   const gender = String(value ?? "").trim().toLowerCase();
@@ -76,11 +77,12 @@ export default function StudentPage() {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
     const sessionUser = safeParseUser(sessionStorage.getItem("loggedInUser"));
     const localUser = safeParseUser(localStorage.getItem("loggedInUser"));
     const user = sessionUser || localUser;
 
-    if (!user?.studentId) {
+    if (!token || user?.role !== "student" || !user?.studentId) {
       router.replace("/login");
       return;
     }
@@ -171,7 +173,7 @@ export default function StudentPage() {
 
   const fetchRooms = async () => {
     try {
-      const res = await fetch("http://localhost:3001/rooms");
+      const res = await apiFetch("/rooms");
       const data = await res.json();
       setRooms(data);
     } catch (error) {
@@ -181,7 +183,7 @@ export default function StudentPage() {
 
   const fetchBookings = async (id: string) => {
     try {
-      const res = await fetch("http://localhost:3001/bookings");
+      const res = await apiFetch("/bookings");
       const data = await res.json();
       setAllBookings(data);
       setMyBookings(data.filter((b: any) => b.studentId === id));
@@ -253,7 +255,7 @@ export default function StudentPage() {
     if (studentHasActiveBooking) return;
 
     try {
-      const res = await fetch("http://localhost:3001/bookings", {
+      const res = await apiFetch("/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -291,7 +293,7 @@ export default function StudentPage() {
 
   const fetchAnnouncements = async () => {
     try {
-      const res = await fetch("http://localhost:3001/announcements");
+      const res = await apiFetch("/announcements");
       const data = await res.json();
       const normalizedGender = studentGender.toUpperCase();
       const filtered = Array.isArray(data)
@@ -309,7 +311,7 @@ export default function StudentPage() {
 
   const fetchBills = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/payments/${id}`);
+      const res = await apiFetch(`/payments/${id}`);
       const data = await res.json();
       setBills(data);
     } catch (error) {
@@ -319,7 +321,7 @@ export default function StudentPage() {
 
   const fetchChatThreads = async () => {
     try {
-      const res = await fetch("http://localhost:3001/chat/threads");
+      const res = await apiFetch("/chat/threads");
       const data = await res.json();
       setChatThreads(data);
       setChatsLoaded(true);
@@ -330,7 +332,7 @@ export default function StudentPage() {
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/messages`);
+      const res = await apiFetch(`/chat/threads/${chatKey}/messages`);
       const data = await res.json();
       setChatMessages(data);
       setSelectedChatKey(chatKey);
@@ -349,7 +351,7 @@ export default function StudentPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${selectedChatKey}/messages`, {
+      const res = await apiFetch(`/chat/threads/${selectedChatKey}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -375,7 +377,7 @@ export default function StudentPage() {
 
   const handleRespondRequest = async (chatKey: string, action: "accept" | "deny") => {
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/respond`, {
+      const res = await apiFetch(`/chat/threads/${chatKey}/respond`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
@@ -397,7 +399,7 @@ export default function StudentPage() {
 
   const handleDeleteBooking = async (bookingId: number) => {
     try {
-      const res = await fetch(`http://localhost:3001/bookings/${bookingId}`, {
+      const res = await apiFetch(`/bookings/${bookingId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -422,8 +424,9 @@ export default function StudentPage() {
     setAnnouncementReadIds((prev) => Array.from(new Set([...prev, ...unreadIds])));
   }, [view, announcements, announcementReadIds]);
   const handlePayBill = async (billId: number) => {
+    if (!window.confirm("Only mark this bill as paid after you have actually paid the dormitory office. Continue?")) return;
     try {
-      const res = await fetch(`http://localhost:3001/payments/${billId}/pay`, {
+      const res = await apiFetch(`/payments/${billId}/pay`, {
         method: "PATCH",
       });
       if (!res.ok) {
@@ -450,6 +453,8 @@ export default function StudentPage() {
   );
 
   const handleLogout = () => {
+    sessionStorage.removeItem("accessToken");
+    localStorage.removeItem("accessToken");
     sessionStorage.removeItem("loggedInUser");
     sessionStorage.removeItem("loggedInRole");
     localStorage.removeItem("loggedInUser");
@@ -459,7 +464,7 @@ export default function StudentPage() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-8 text-slate-900">
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
         <div className="mx-auto flex min-h-[60vh] max-w-6xl items-center justify-center">
           <div className="rounded-2xl border border-white/60 bg-white/80 px-6 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
             Loading...
@@ -485,8 +490,8 @@ export default function StudentPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex rounded-lg bg-slate-200 p-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-1 rounded-lg bg-slate-200 p-1">
               <button
                 onClick={() => setView("available")}
                 className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
@@ -792,7 +797,7 @@ export default function StudentPage() {
               <div className="mb-5">
                 <h2 className="text-2xl font-bold text-slate-900">Your Bills</h2>
                 <p className="text-sm text-slate-500">
-                  Pay monthly electric, water, and semester room bills.
+                  Track your dorm bills and record payments after completing them through the dormitory office.
                 </p>
               </div>
 
@@ -827,7 +832,7 @@ export default function StudentPage() {
                             onClick={() => handlePayBill(bill.id)}
                             className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
                           >
-                            Pay Now
+                            Mark as paid
                           </button>
                         ) : null}
                       </div>
@@ -851,7 +856,7 @@ export default function StudentPage() {
                 </p>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+              <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-sm font-semibold text-slate-600">Chats</p>

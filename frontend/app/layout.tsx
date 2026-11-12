@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -13,9 +13,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UniDorm Dormitory Management",
-  description: "Manage dorm rooms, bookings, announcements, chat, and payments from any device.",
-  viewport: "width=device-width, initial-scale=1",
+  title: "UniDorm | Smart booking, simple living",
+  description:
+    "A simple, connected dormitory platform for room bookings, announcements, messaging, and payments.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#f8fafc",
 };
 
 export default function RootLayout({

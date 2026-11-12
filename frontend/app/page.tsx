@@ -6,15 +6,15 @@ export default function HomePage() {
   const router = useRouter();
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-6">
-      <div className="mx-auto grid h-full max-w-7xl items-center gap-10 lg:grid-cols-2">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-200 px-6 py-6">
+      <div className="mx-auto grid min-h-[calc(100dvh-3rem)] max-w-7xl items-center gap-10 py-6 lg:grid-cols-2">
         {/* LEFT SIDE */}
         <div className="relative z-10 flex flex-col justify-center">
           <div className="mb-5 inline-flex w-fit rounded-full border border-blue-200 bg-white/70 px-4 py-1 text-sm font-semibold text-blue-600 backdrop-blur-xl">
             Unidorm • Smart Living
           </div>
 
-          <h1 className="text-5xl font-bold leading-tight text-slate-900 lg:text-7xl">
+          <h1 className="text-4xl font-bold leading-tight text-slate-900 sm:text-5xl lg:text-7xl">
             Modern Dorm
             <span className="block text-blue-600">Management</span>
           </h1>
@@ -41,8 +41,8 @@ export default function HomePage() {
           </div>
 
           {/* MINI STATS */}
-          <div className="mt-10 grid max-w-lg grid-cols-3 gap-4">
-            <div className="rounded-2xl bg-white/70 p-4 text-center shadow-sm backdrop-blur-xl">
+          <div className="mt-10 grid max-w-lg grid-cols-3 gap-2 sm:gap-4">
+            <div className="rounded-2xl bg-white/70 p-3 text-center sm:p-4 text-center shadow-sm backdrop-blur-xl">
               <p className="text-2xl font-bold text-slate-900">24/7</p>
               <p className="text-xs text-slate-500">Access</p>
             </div>
