@@ -121,3 +121,36 @@ img, svg { max-width: 100%; display: block; }
     transition-duration: .01ms !important;
   }
 }
+
+/* Shared surfaces used throughout student and admin workspaces */
+section[class*="rounded-[2rem]"],
+section[class*="rounded-\[2rem\]"],
+div[class*="rounded-[2rem]"][class*="shadow-"],
+div[class*="rounded-\[2rem\]"][class*="shadow-"] {
+  border-color: rgba(226, 232, 240, .88);
+  box-shadow: 0 18px 54px rgba(15, 23, 42, .075);
+  backdrop-filter: blur(14px);
+}
+
+div[class*="rounded-2xl"][class*="border"][class*="bg-white"],
+div[class*="rounded-xl"][class*="border"][class*="bg-white"] {
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+button[class*="bg-blue-600"] {
+  box-shadow: 0 8px 18px rgba(37, 99, 235, .16);
+}
+button[class*="bg-blue-600"]:not(:disabled):hover {
+  box-shadow: 0 12px 24px rgba(37, 99, 235, .23);
+  filter: saturate(1.06);
+}
+button[class*="bg-emerald-600"] {
+  box-shadow: 0 8px 18px rgba(5, 150, 105, .14);
+}
+button[class*="bg-red-600"] {
+  box-shadow: 0 8px 18px rgba(220, 38, 38, .12);
+}
+
+label {
+  letter-spacing: .005em;
+}
