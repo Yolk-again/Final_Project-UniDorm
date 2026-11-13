@@ -30,6 +30,7 @@ export default function LoginPage() {
     const searchParams = new URLSearchParams(window.location.search);
     const roleParam = searchParams.get("role");
     if (roleParam === "student" || roleParam === "admin") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRole(roleParam);
     }
 

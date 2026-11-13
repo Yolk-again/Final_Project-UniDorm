@@ -1,9 +1,15 @@
-import { ForbiddenException } from "@nestjs/common";
+﻿import { ForbiddenException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthService } from "./auth.service";
+
+jest.mock("bcrypt", () => ({
+  __esModule: true,
+  hash: jest.fn(),
+  compare: jest.fn(),
+}));
 
 describe("AuthService", () => {
   let service: AuthService;
@@ -21,6 +27,7 @@ describe("AuthService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -30,10 +37,6 @@ describe("AuthService", () => {
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
   });
 
   it("should be defined", () => {
@@ -62,7 +65,8 @@ describe("AuthService", () => {
       role: "student",
       password: "stored-hash",
     });
-    jest.spyOn(bcrypt, "compare").mockResolvedValue(true);
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
     const result = await service.login({
       role: "student",

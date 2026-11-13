@@ -809,9 +809,12 @@ export default function AdminDashboard() {
                 })}
               </div>
             </section>
+          </div>
+        </div>
+        )}
 
         {adminView === "requests" && (
-            <>
+
             <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">
@@ -890,6 +893,11 @@ export default function AdminDashboard() {
               </div>
             </section>
 
+
+
+        )}
+
+        {adminView === "announcements" && (
             <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Announcements</h2>
@@ -957,7 +965,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </section>
-            </>
         )}
 
         {adminView === "payments" && (
@@ -1265,8 +1272,8 @@ export default function AdminDashboard() {
                 </div>
               )}
             </section>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

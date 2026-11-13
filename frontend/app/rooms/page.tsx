@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
 
@@ -171,7 +171,7 @@ export default function StudentPage() {
     );
   }, [announcementReadIds, studentId]);
 
-  const fetchRooms = async () => {
+  const fetchRooms = useCallback(async () => {
     try {
       const res = await apiFetch("/rooms");
       const data = await res.json();
@@ -179,9 +179,9 @@ export default function StudentPage() {
     } catch (error) {
       console.error("Failed to fetch rooms:", error);
     }
-  };
+  }, []);
 
-  const fetchBookings = async (id: string) => {
+  const fetchBookings = useCallback(async (id: string) => {
     try {
       const res = await apiFetch("/bookings");
       const data = await res.json();
@@ -190,17 +190,9 @@ export default function StudentPage() {
     } catch (error) {
       console.error("Failed to fetch bookings:", error);
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    if (!authChecked || !studentId) return;
 
-    fetchRooms();
-    fetchBookings(studentId);
-    fetchAnnouncements();
-    fetchBills(studentId);
-    fetchChatThreads();
-  }, [authChecked, studentId]);
 
   const getRoomBookingStatus = (roomNumber: string) => {
     const roomBookings = allBookings.filter((b) => b.roomNumber === roomNumber);
@@ -291,7 +283,7 @@ export default function StudentPage() {
     (b) => !hiddenBookingIds.includes(b.id),
   );
 
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = useCallback(async () => {
     try {
       const res = await apiFetch("/announcements");
       const data = await res.json();
@@ -307,9 +299,9 @@ export default function StudentPage() {
     } catch (error) {
       console.error("Failed to fetch announcements:", error);
     }
-  };
+  }, [studentGender]);
 
-  const fetchBills = async (id: string) => {
+  const fetchBills = useCallback(async (id: string) => {
     try {
       const res = await apiFetch(`/payments/${id}`);
       const data = await res.json();
@@ -317,9 +309,9 @@ export default function StudentPage() {
     } catch (error) {
       console.error("Failed to fetch bills:", error);
     }
-  };
+  }, []);
 
-  const fetchChatThreads = async () => {
+  const fetchChatThreads = useCallback(async () => {
     try {
       const res = await apiFetch("/chat/threads");
       const data = await res.json();
@@ -328,7 +320,25 @@ export default function StudentPage() {
     } catch (error) {
       console.error("Failed to fetch chat threads:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!authChecked || !studentId) return;
+
+    void fetchRooms();
+    void fetchBookings(studentId);
+    void fetchAnnouncements();
+    void fetchBills(studentId);
+    void fetchChatThreads();
+  }, [
+    authChecked,
+    studentId,
+    fetchRooms,
+    fetchBookings,
+    fetchAnnouncements,
+    fetchBills,
+    fetchChatThreads,
+  ]);
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
@@ -901,7 +911,7 @@ export default function StudentPage() {
                                 )}
                               </div>
                             </div>
-                            {hasUnreadThread(thread, "student", chatReadTimes, selectedChatKey) && (
+                            {hasUnreadThread(thread, "student", chatReadTimes, selectedChatKey, studentId) && (
                               <span className="absolute right-4 top-4 h-3.5 w-3.5 rounded-full bg-red-500 ring-2 ring-white" />
                             )}
                           </button>
