@@ -2,8 +2,13 @@
 
 :root {
   color-scheme: light;
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f5f7fb;
+  --foreground: #172033;
+  --brand: #315ee8;
+  --brand-dark: #2448bf;
+  --surface: rgba(255, 255, 255, 0.88);
+  --muted: #64748b;
+  --line: rgba(148, 163, 184, 0.2);
 }
 
 @theme inline {
@@ -13,9 +18,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 html {
   scroll-behavior: smooth;
@@ -24,41 +27,97 @@ html {
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 8% 4%, rgba(96, 165, 250, 0.10), transparent 28rem),
+    radial-gradient(circle at 92% 12%, rgba(129, 140, 248, 0.09), transparent 30rem),
+    var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+button, input, textarea, select { font: inherit; }
+button { touch-action: manipulation; }
+button:not(:disabled) { transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease; }
+button:not(:disabled):active { transform: translateY(1px) scale(0.99); }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 3px solid rgba(49, 94, 232, 0.35);
+  outline-offset: 3px;
 }
 
-button {
-  touch-action: manipulation;
+input, textarea, select {
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+input:hover, textarea:hover, select:hover { border-color: rgba(100, 116, 139, 0.55); }
+input:focus, textarea:focus, select:focus {
+  border-color: rgba(49, 94, 232, 0.8);
+  box-shadow: 0 0 0 4px rgba(49, 94, 232, 0.10);
 }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.45);
-  outline-offset: 2px;
+img, svg { max-width: 100%; display: block; }
+::selection { background: rgba(59, 130, 246, 0.2); }
+
+@keyframes ui-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ui-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+@keyframes ui-shimmer {
+  100% { transform: translateX(120%); }
 }
 
-img,
-svg {
-  max-width: 100%;
-  display: block;
+.animate-ui-in { animation: ui-fade-up 620ms cubic-bezier(.2,.75,.25,1) both; }
+.animate-ui-in-delay { animation: ui-fade-up 720ms 120ms cubic-bezier(.2,.75,.25,1) both; }
+.animate-ui-float { animation: ui-float 6s ease-in-out infinite; }
+.ui-glass {
+  background: rgba(255,255,255,.78);
+  border: 1px solid rgba(255,255,255,.9);
+  box-shadow: 0 24px 80px rgba(25, 45, 85, .10), 0 2px 8px rgba(25,45,85,.04);
+  backdrop-filter: blur(22px);
 }
+.ui-card {
+  border: 1px solid rgba(226,232,240,.85);
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 8px 28px rgba(15,23,42,.045);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+.ui-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(148,163,184,.45);
+  box-shadow: 0 16px 38px rgba(15,23,42,.075);
+}
+.ui-button-primary {
+  background: linear-gradient(135deg, #416cf0, #2d55d8);
+  box-shadow: 0 10px 22px rgba(49,94,232,.22);
+}
+.ui-button-primary:hover {
+  background: linear-gradient(135deg, #315ee8, #2448bf);
+  box-shadow: 0 14px 28px rgba(49,94,232,.28);
+  transform: translateY(-2px);
+}
+.ui-input {
+  border: 1px solid #e2e8f0;
+  background: rgba(255,255,255,.92);
+  border-radius: 14px;
+}
+.page-transition { animation: ui-fade-in 300ms ease both; }
 
-::selection {
-  background: rgba(59, 130, 246, 0.2);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }
