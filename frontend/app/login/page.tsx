@@ -140,7 +140,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-8 sm:px-6 sm:py-10">
+    <div className="auth-page auth-page-login min-h-screen flex items-center justify-center px-4 py-8 sm:px-6 sm:py-10">
       {toast && (
         <div
           className={`fixed right-6 top-6 z-50 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-xl ${
@@ -153,8 +153,8 @@ export default function LoginPage() {
         </div>
       )}
 
-      <div className="grid w-full max-w-6xl items-center gap-12 md:grid-cols-2">
-        <div className="space-y-6">
+      <div className="auth-layout grid w-full max-w-6xl items-center gap-8 md:grid-cols-2">
+        <div className="auth-aside space-y-6">
           <p className="text-sm font-semibold tracking-[0.25em] text-blue-600 uppercase">
             Unidorm
           </p>
@@ -185,7 +185,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] sm:p-8 backdrop-blur-xl">
+        <div className="auth-card rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] sm:p-8 backdrop-blur-xl">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">Login</h2>
@@ -203,14 +203,14 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="mb-6 flex rounded-lg bg-slate-100 p-1">
+          <div className="auth-role-switch mb-6 flex rounded-lg bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => {
                 setRole("student");
                 setErrors({});
               }}
-              className={`flex-1 rounded-md py-2 text-sm font-semibold transition ${
+              className={`auth-role-option flex-1 rounded-md py-2 text-sm font-semibold transition ${
                 role === "student"
                   ? "bg-white text-blue-600 shadow-sm"
                   : "text-slate-600"
@@ -224,7 +224,7 @@ export default function LoginPage() {
                 setRole("admin");
                 setErrors({});
               }}
-              className={`flex-1 rounded-md py-2 text-sm font-semibold transition ${
+              className={`auth-role-option flex-1 rounded-md py-2 text-sm font-semibold transition ${
                 role === "admin"
                   ? "bg-white text-blue-600 shadow-sm"
                   : "text-slate-600"

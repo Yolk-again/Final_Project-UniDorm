@@ -496,6 +496,10 @@ export default function AdminDashboard() {
     (b) => b.status === "Pending" && !hiddenBookingIds.includes(b.id),
   );
 
+  const availableRoomCount = roomList.filter((room) => getRoomStatus(room.roomNumber) === "Available").length;
+  const occupiedRoomCount = roomList.filter((room) => getRoomStatus(room.roomNumber) === "Occupied").length;
+  const pendingBillCount = bills.filter((bill) => String(bill.status).toUpperCase() === "PENDING").length;
+
   const handleHideBooking = (booking: any) => {
     setHiddenBookingIds((prev) => {
       if (prev.includes(booking.id)) return prev;
@@ -538,7 +542,7 @@ export default function AdminDashboard() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
+      <div className="admin-dashboard min-h-screen px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
         <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center">
           <div className="rounded-2xl border border-white/60 bg-white/80 px-6 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
             Loading...
@@ -549,9 +553,9 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-100 via-white to-slate-200 px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-6 md:flex-row md:items-center md:justify-between">
+    <div className="admin-dashboard min-h-screen overflow-x-hidden px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
+      <div className="dashboard-container mx-auto max-w-7xl">
+        <div className="dashboard-header mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-6 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold tracking-[0.35em] text-blue-600 uppercase">
               Unidorm
@@ -572,26 +576,35 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <div className="mb-8 rounded-[2rem] border border-white/60 bg-white/80 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-4">
-          <div className="flex flex-wrap gap-3">
+        <section className="dashboard-stats-grid" aria-label="Dormitory overview">
+          <article className="dashboard-stat-card stat-blue"><span className="stat-symbol" aria-hidden="true">⌂</span><div><p>Total rooms</p><strong>{roomList.length}</strong><small>Across all buildings</small></div></article>
+          <article className="dashboard-stat-card stat-mint"><span className="stat-symbol" aria-hidden="true">✓</span><div><p>Available rooms</p><strong>{availableRoomCount}</strong><small>Ready for booking</small></div></article>
+          <article className="dashboard-stat-card stat-amber"><span className="stat-symbol" aria-hidden="true">◷</span><div><p>Pending requests</p><strong>{pendingBookingRequests.length}</strong><small>Awaiting your review</small></div></article>
+          <article className="dashboard-stat-card stat-violet"><span className="stat-symbol" aria-hidden="true">฿</span><div><p>Pending bills</p><strong>{pendingBillCount}</strong><small>{occupiedRoomCount} occupied rooms</small></div></article>
+        </section>
+
+        <div className="dashboard-nav-wrap mb-7 rounded-[2rem] border border-white/60 bg-white/80 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-4">
+          <div className="dashboard-nav flex flex-wrap gap-2">
             {[
-              { key: "rooms", label: "Rooms" },
-              { key: "requests", label: "Requests" },
-              { key: "announcements", label: "Announcements" },
-              { key: "payments", label: "Payments" },
-              { key: "chat", label: "Chat" },
+              { key: "rooms", label: "Room management", icon: "▦" },
+              { key: "requests", label: "Booking requests", icon: "◷" },
+              { key: "announcements", label: "Announcements", icon: "✳" },
+              { key: "payments", label: "Payments & bills", icon: "฿" },
+              { key: "chat", label: "Messages", icon: "▤" },
             ].map((item) => (
               <button
                 key={item.key}
                 type="button"
+                aria-pressed={adminView === item.key}
                 onClick={() => setAdminView(item.key as any)}
-                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                className={`dashboard-tab rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                   adminView === item.key
                     ? "bg-blue-600 text-white shadow-sm"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 } relative`}
               >
-                {item.label}
+                <span className="dashboard-tab-icon" aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
                 {item.key === "chat" && chatThreads.some((thread: any) => hasUnreadThread(thread, chatReadTimes, selectedChatKey, adminId)) && (
                   <span className="absolute right-3 top-3 inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
                 )}
@@ -602,7 +615,7 @@ export default function AdminDashboard() {
 
         {adminView === "rooms" && (
           <div className="grid gap-8 lg:grid-cols-3">
-            <div className="h-fit rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] sm:p-8 backdrop-blur-xl">
+            <div className="dashboard-panel h-fit rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] sm:p-8 backdrop-blur-xl">
             <h2 className="mb-2 text-2xl font-bold text-slate-900">
               {isEditing ? "Edit Room" : "Add New Room"}
             </h2>
@@ -703,7 +716,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="space-y-10 lg:col-span-2">
-            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900">
@@ -723,7 +736,7 @@ export default function AdminDashboard() {
                   return (
                     <div
                       key={r.id}
-                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                      className="room-tile rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div>
@@ -815,7 +828,7 @@ export default function AdminDashboard() {
 
         {adminView === "requests" && (
 
-            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">
                   Booking Requests
@@ -898,7 +911,7 @@ export default function AdminDashboard() {
         )}
 
         {adminView === "announcements" && (
-            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Announcements</h2>
                 <p className="text-sm text-slate-500">
@@ -907,7 +920,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                <div className="dashboard-panel rounded-2xl border border-slate-200 bg-slate-50 p-6">
                   <div className="space-y-4">
                     <div>
                       <label className={labelClass}>Title</label>
@@ -968,14 +981,14 @@ export default function AdminDashboard() {
         )}
 
         {adminView === "payments" && (
-          <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+          <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-slate-900">Payments</h2>
               <p className="text-sm text-slate-500">
                 Publish payment requests for students.
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <div className="dashboard-panel rounded-2xl border border-slate-200 bg-white p-6">
               <div className="space-y-4">
                 <div>
                   <label className={labelClass}>Student ID</label>
@@ -1099,7 +1112,7 @@ export default function AdminDashboard() {
 
         {adminView === "chat" && (
           <>
-            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Messaging & Chat</h2>
                 <p className="text-sm text-slate-500">
@@ -1108,7 +1121,7 @@ export default function AdminDashboard() {
               </div>
 
             <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                <div className="dashboard-panel rounded-2xl border border-slate-200 bg-slate-50 p-6">
                   <p className="mb-4 text-sm font-semibold text-slate-700">Create Chat</p>
                   <div className="space-y-4">
                     <div>
@@ -1157,7 +1170,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                <div className="dashboard-panel rounded-2xl border border-slate-200 bg-white p-6">
                   <p className="mb-4 text-sm font-semibold text-slate-700">Open Chat Threads</p>
                   <div className="space-y-3">
                     {chatThreads.map((thread) => (
@@ -1198,7 +1211,7 @@ export default function AdminDashboard() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Selected Chat</h2>
                 <p className="text-sm text-slate-500">
@@ -1208,7 +1221,7 @@ export default function AdminDashboard() {
 
               {selectedChatKey ? (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                  <div className="dashboard-panel rounded-2xl border border-slate-200 bg-slate-50 p-6">
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <div>
                         <p className="text-lg font-semibold text-slate-900">
