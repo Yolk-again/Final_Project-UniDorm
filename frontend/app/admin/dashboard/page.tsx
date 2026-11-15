@@ -3,18 +3,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../../lib/api";
+import LiveClock from "../../components/LiveClock";
+import NotificationCenter from "../../components/NotificationCenter";
+import ToastViewport, { type ToastMessage } from "../../components/ToastViewport";
+import { formatDateTime } from "../../lib/date-time";
 
 function hasUnreadThread(
   thread: any,
-  chatReadTimes: Record<string, string>,
   selectedChatKey: string,
   currentUserId = "",
 ) {
   if (selectedChatKey === thread.chatKey) return false;
-  if (thread.type === "DIRECT" && thread.status === "PENDING") return true;
   if (!thread.lastMessage) return false;
   if (
     thread.lastMessage.senderRole === "admin" &&
@@ -23,14 +25,17 @@ function hasUnreadThread(
     return false;
   }
 
-  const lastRead = chatReadTimes[thread.chatKey];
+  if (thread.lastReadMessageId !== null && thread.lastReadMessageId !== undefined) {
+    return Number(thread.lastMessage.id) > Number(thread.lastReadMessageId);
+  }
+  const lastRead = thread.lastReadAt;
   if (!lastRead) return true;
-
-  return new Date(thread.lastMessage.createdAt) > new Date(lastRead);
+  return new Date(thread.lastMessage.createdAt).getTime() > new Date(lastRead).getTime();
 }
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const publishingAnnouncementRef = useRef(false);
   const adminId = (() => {
     try {
       return (
@@ -53,7 +58,6 @@ export default function AdminDashboard() {
   const [selectedChatKey, setSelectedChatKey] = useState("");
   const [firstChatMessage, setFirstChatMessage] = useState("");
   const [directStudentId, setDirectStudentId] = useState("");
-  const [chatReadTimes, setChatReadTimes] = useState<Record<string, string>>({});
   const [paymentForm, setPaymentForm] = useState({
     studentId: "",
     category: "ELECTRIC",
@@ -68,14 +72,18 @@ export default function AdminDashboard() {
     content: "",
     audience: "ALL",
   });
+  const [isPublishingAnnouncement, setIsPublishingAnnouncement] = useState(false);
   const [bills, setBills] = useState<any[]>([]);
   const [newChatMessage, setNewChatMessage] = useState("");
-  const [pendingChatNotifications, setPendingChatNotifications] = useState(false);
   const [adminView, setAdminView] = useState<"rooms" | "requests" | "announcements" | "payments" | "chat">("rooms");
 
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [bookingActionId, setBookingActionId] = useState<number | null>(null);
 
   const [hiddenBookingIds, setHiddenBookingIds] = useState<number[]>([]);
 
@@ -109,39 +117,9 @@ export default function AdminDashboard() {
       }
     }
 
-    const storedReadTimes = localStorage.getItem("chatReadTimes_admin");
-    if (storedReadTimes) {
-      try {
-        const parsed = JSON.parse(storedReadTimes);
-        if (parsed && typeof parsed === "object") {
-          setChatReadTimes(parsed as Record<string, string>);
-        }
-      } catch {
-        setChatReadTimes({});
-      }
-    }
-
     setAuthChecked(true);
     refresh();
   }, [router]);
-
-  useEffect(() => {
-    const storedReadTimes = localStorage.getItem("chatReadTimes_admin");
-    if (storedReadTimes) {
-      try {
-        const parsed = JSON.parse(storedReadTimes);
-        if (parsed && typeof parsed === "object") {
-          setChatReadTimes(parsed as Record<string, string>);
-        }
-      } catch {
-        setChatReadTimes({});
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("chatReadTimes_admin", JSON.stringify(chatReadTimes));
-  }, [chatReadTimes]);
 
   useEffect(() => {
     if (authChecked) {
@@ -149,41 +127,80 @@ export default function AdminDashboard() {
         "hiddenBookingIds_admin",
         JSON.stringify(hiddenBookingIds),
       );
-      localStorage.setItem(
-        "chatReadTimes_admin",
-        JSON.stringify(chatReadTimes),
-      );
     }
-  }, [hiddenBookingIds, chatReadTimes, authChecked]);
+  }, [hiddenBookingIds, authChecked]);
 
   const refresh = async () => {
+    setIsRefreshing(true);
     try {
       await ensureGroupChats();
 
-      const roomsRes = await apiFetch("/rooms");
-      const bookingsRes = await apiFetch("/bookings");
-      const announcementsRes = await apiFetch("/announcements");
-      const chatRes = await apiFetch("/chat/threads");
-      const billRes = await apiFetch("/payments");
+      const [roomsRes, bookingsRes, announcementsRes, chatRes, billRes] = await Promise.all([
+        apiFetch("/rooms"),
+        apiFetch("/bookings"),
+        apiFetch("/announcements"),
+        apiFetch("/chat/threads"),
+        apiFetch("/payments"),
+      ]);
 
-      const roomsData = await roomsRes.json();
-      const bookingsData = await bookingsRes.json();
-      const announcementsData = await announcementsRes.json();
-      const chatData = await chatRes.json();
-      const billData = await billRes.json();
+      const [roomsData, bookingsData, announcementsData, chatData, billData] = await Promise.all([
+        roomsRes.json(),
+        bookingsRes.json(),
+        announcementsRes.json(),
+        chatRes.json(),
+        billRes.json(),
+      ]);
 
-      setRoomList(roomsData);
-      setBookingRequests(bookingsData);
-      setAnnouncements(announcementsData);
-      setChatThreads(chatData);
-      setBills(billData);
-      setPendingChatNotifications(
-        chatData.some((thread: any) => thread.type === "DIRECT" && thread.status === "PENDING"),
-      );
+      setRoomList(Array.isArray(roomsData) ? roomsData : []);
+      setBookingRequests(Array.isArray(bookingsData) ? bookingsData : []);
+      setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
+      setChatThreads(Array.isArray(chatData) ? chatData : []);
+      setBills(Array.isArray(billData) ? billData : []);
+      setLastSyncedAt(new Date());
     } catch (error) {
       console.error("Failed to fetch data:", error);
+      setToast({ title: "Could not refresh workspace", description: "Check that the UniDorm API is running, then try again.", tone: "error" });
+    } finally {
+      setIsRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (!authChecked) return;
+
+    const syncWorkspace = async () => {
+      try {
+        const [roomsRes, bookingsRes, announcementsRes, chatRes, billRes] = await Promise.all([
+          apiFetch("/rooms"),
+          apiFetch("/bookings"),
+          apiFetch("/announcements"),
+          apiFetch("/chat/threads"),
+          apiFetch("/payments"),
+        ]);
+        const [roomsData, bookingsData, announcementsData, chatData, billData] = await Promise.all([
+          roomsRes.json(),
+          bookingsRes.json(),
+          announcementsRes.json(),
+          chatRes.json(),
+          billRes.json(),
+        ]);
+        setRoomList(Array.isArray(roomsData) ? roomsData : []);
+        setBookingRequests(Array.isArray(bookingsData) ? bookingsData : []);
+        setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
+        setChatThreads(Array.isArray(chatData) ? chatData : []);
+        setBills(Array.isArray(billData) ? billData : []);
+        setLastSyncedAt(new Date());
+      } catch (error) {
+        console.error("Background workspace sync failed:", error);
+      }
+    };
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void syncWorkspace();
+    }, 60000);
+
+    return () => window.clearInterval(timer);
+  }, [authChecked]);
 
   const generateRoomNumber = (gender: string) => {
     const prefix = gender === "Male" ? "A" : "B";
@@ -274,15 +291,28 @@ export default function AdminDashboard() {
   const fetchChatMessages = async (chatKey: string) => {
     try {
       const res = await apiFetch(`/chat/threads/${chatKey}/messages`);
+      if (!res.ok) throw new Error("Could not load this chat thread.");
       const data = await res.json();
-      setChatMessages(data);
+      setChatMessages(Array.isArray(data) ? data : []);
       setSelectedChatKey(chatKey);
-      setChatReadTimes((prev) => ({
-        ...prev,
-        [chatKey]: new Date().toISOString(),
-      }));
+
+      try {
+        const readResponse = await apiFetch(`/chat/threads/${encodeURIComponent(chatKey)}/read`, { method: "PATCH" });
+        if (!readResponse.ok) throw new Error(await readResponse.text().catch(() => "Read receipt could not be saved."));
+        const readState = await readResponse.json();
+        setChatThreads((prev) => prev.map((thread) => thread.chatKey === chatKey
+          ? { ...thread, lastReadAt: readState.lastReadAt, lastReadMessageId: readState.lastReadMessageId }
+          : thread));
+      } catch (readError) {
+        console.error("Could not persist admin chat read receipt:", readError);
+      }
     } catch (error) {
-      console.error("Failed to fetch chat messages:", error);
+      console.error("Failed to fetch or mark chat as read:", error);
+      setToast({
+        title: "Could not load chat",
+        description: error instanceof Error ? error.message : "Please try again.",
+        tone: "error",
+      });
     }
   };
 
@@ -301,7 +331,6 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           type: "GROUP",
           audienceGender,
-          adminId: adminData.adminId,
         }),
       });
       const data = await res.json();
@@ -337,7 +366,7 @@ export default function AdminDashboard() {
         sessionStorage.getItem("loggedInUser") || localStorage.getItem("loggedInUser") || "null",
       );
       if (!adminData?.adminId) {
-        console.error("Missing admin ID for direct chat request");
+        console.error("Missing admin ID for direct chat");
         return;
       }
       const res = await apiFetch("/chat/threads", {
@@ -346,7 +375,6 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           type: "DIRECT",
           studentId: directStudentId.trim(),
-          adminId: adminData.adminId,
         }),
       });
       const thread = await res.json();
@@ -354,53 +382,206 @@ export default function AdminDashboard() {
       setChatThreads((prev) => [thread, ...prev.filter((t) => t.chatKey !== thread.chatKey)]);
       setSelectedChatKey(thread.chatKey);
       if (firstChatMessage.trim()) {
-        await apiFetch(`/chat/threads/${thread.chatKey}/messages`, {
+        const messageResponse = await apiFetch(`/chat/threads/${encodeURIComponent(thread.chatKey)}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            senderRole: "admin",
-            senderId: adminData?.adminId,
-            content: firstChatMessage.trim(),
-          }),
+          body: JSON.stringify({ content: firstChatMessage.trim() }),
         });
+        const messageResult = await messageResponse.json().catch(() => ({}));
+        if (!messageResponse.ok) throw new Error(messageResult.message || "Could not send the first message");
         setFirstChatMessage("");
       }
+      await fetchChatMessages(thread.chatKey);
     } catch (error) {
       console.error(error);
     }
   };
 
   const createAnnouncement = async () => {
-    try {
-      const adminData = JSON.parse(
-        sessionStorage.getItem("loggedInUser") ||
-          localStorage.getItem("loggedInUser") ||
-          "null",
-      );
+    // Prevent rapid double-clicks from sending a second request after the form resets.
+    if (publishingAnnouncementRef.current) return;
 
+    const title = announcementForm.title.trim();
+    const content = announcementForm.content.trim();
+    if (!title || !content) {
+      setToast({
+        title: "Complete announcement details",
+        description: "Enter both an announcement title and its content before publishing.",
+        tone: "error",
+      });
+      return;
+    }
+
+    publishingAnnouncementRef.current = true;
+    setIsPublishingAnnouncement(true);
+
+    try {
       const res = await apiFetch("/announcements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...announcementForm,
-          createdBy: adminData?.adminId || adminData?.name || "admin",
+          title,
+          content,
+          audience: announcementForm.audience,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Could not create announcement");
-      setAnnouncements((prev) => [data, ...prev]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = Array.isArray(data.message)
+          ? data.message.join(", ")
+          : data.message;
+        throw new Error(message || "Could not create announcement");
+      }
+
+      const createdAnnouncement = data?.announcement ?? data?.data ?? data;
+      if (createdAnnouncement && typeof createdAnnouncement === "object" && createdAnnouncement.id != null) {
+        setAnnouncements((prev) => [
+          createdAnnouncement,
+          ...prev.filter((item) => item.id !== createdAnnouncement.id),
+        ]);
+      } else {
+        await refresh();
+      }
+
       setAnnouncementForm({ title: "", content: "", audience: "ALL" });
+      setToast({
+        title: "Announcement published",
+        description: "Your announcement is now available to its selected audience.",
+        tone: "success",
+      });
     } catch (error) {
-      console.error(error);
+      console.error("Could not publish announcement:", error);
+      setToast({
+        title: "Could not publish announcement",
+        description: error instanceof Error ? error.message : "Please try again.",
+        tone: "error",
+      });
+    } finally {
+      publishingAnnouncementRef.current = false;
+      setIsPublishingAnnouncement(false);
+    }
+  };
+
+  const openPaymentProof = async (bill: any) => {
+    const previewWindow = window.open("about:blank", "_blank");
+    try {
+      const response = await apiFetch(`/payments/${bill.id}/proof`);
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(details.message || "Could not load payment proof");
+      }
+      const proofBlob = await response.blob();
+      const proofUrl = URL.createObjectURL(proofBlob);
+      if (previewWindow) {
+        previewWindow.location.href = proofUrl;
+      } else {
+        const anchor = document.createElement("a");
+        anchor.href = proofUrl;
+        anchor.download = bill.proofOriginalName || `payment-proof-${bill.id}`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(proofUrl), 60000);
+    } catch (error) {
+      previewWindow?.close();
+      setToast({
+        title: "Could not open payment proof",
+        description: error instanceof Error ? error.message : "Please try again.",
+        tone: "error",
+      });
+    }
+  };
+
+  const openPaymentSubmissionProof = async (billId: number, submission: any) => {
+    const previewWindow = window.open("about:blank", "_blank");
+    try {
+      const response = await apiFetch(`/payments/${billId}/submissions/${submission.id}/proof`);
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(details.message || "Could not load historical payment proof");
+      }
+      const proofBlob = await response.blob();
+      const proofUrl = URL.createObjectURL(proofBlob);
+      if (previewWindow) {
+        previewWindow.location.href = proofUrl;
+      } else {
+        const anchor = document.createElement("a");
+        anchor.href = proofUrl;
+        anchor.download = submission.proofOriginalName || `payment-submission-${submission.id}`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(proofUrl), 60000);
+    } catch (error) {
+      previewWindow?.close();
+      setToast({
+        title: "Could not open receipt history",
+        description: error instanceof Error ? error.message : "Please try again.",
+        tone: "error",
+      });
+    }
+  };
+
+  const reviewPayment = async (bill: any, decision: "APPROVE" | "REJECT") => {
+    let rejectionReason = "";
+    if (decision === "APPROVE") {
+      const confirmed = window.confirm(
+        `Verify payment for invoice #${String(bill.id).padStart(5, "0")}? Only approve after checking the attached receipt against the actual payment record.`,
+      );
+      if (!confirmed) return;
+    } else {
+      const reason = window.prompt("Explain why this payment proof is being rejected:");
+      if (reason === null) return;
+      rejectionReason = reason.trim();
+      if (!rejectionReason) {
+        setToast({ title: "A rejection reason is required", description: "Enter a short reason so the student knows what to correct.", tone: "error" });
+        return;
+      }
+    }
+
+    try {
+      const response = await apiFetch(`/payments/${bill.id}/verify`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, rejectionReason }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || "Could not review payment");
+      await refresh();
+      setToast({
+        title: decision === "APPROVE" ? "Payment verified" : "Payment proof rejected",
+        description: decision === "APPROVE" ? "The bill is now recorded as paid." : "The student can submit corrected proof.",
+        tone: decision === "APPROVE" ? "success" : "info",
+      });
+    } catch (error) {
+      setToast({ title: "Payment review failed", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
     }
   };
 
   const createBill = async () => {
+    const amount = Number(paymentForm.amount);
+    const dueDate = new Date(paymentForm.dueDate);
+    if (
+      !paymentForm.studentId.trim() ||
+      !paymentForm.category ||
+      !paymentForm.cycle ||
+      !paymentForm.billingLabel.trim() ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !paymentForm.dueDate ||
+      Number.isNaN(dueDate.getTime()) ||
+      !paymentForm.roomNumber.trim()
+    ) {
+      setToast({ title: "Complete all bill details", description: "Student ID, category, cycle, billing label, positive amount, due date, and room number are all required.", tone: "error" });
+      return;
+    }
     try {
       const res = await apiFetch("/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentForm),
+        body: JSON.stringify({ ...paymentForm, dueDate: dueDate.toISOString() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not create bill");
@@ -414,8 +595,10 @@ export default function AdminDashboard() {
         roomNumber: "",
       });
       await refresh();
+      setToast({ title: "Bill created", description: `${data.billingLabel || "The new bill"} is now in the payment ledger.`, tone: "success" });
     } catch (error) {
       console.error(error);
+      setToast({ title: "Could not create bill", description: error instanceof Error ? error.message : "Please check the details and try again.", tone: "error" });
     }
   };
 
@@ -437,9 +620,6 @@ export default function AdminDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chatKey: selectedChatKey,
-          senderRole: "admin",
-          senderId: adminData.adminId,
           content: newChatMessage.trim(),
         }),
       });
@@ -497,8 +677,25 @@ export default function AdminDashboard() {
   );
 
   const availableRoomCount = roomList.filter((room) => getRoomStatus(room.roomNumber) === "Available").length;
+  const availableMaleRoomCount = roomList.filter((room) => getRoomStatus(room.roomNumber) === "Available" && String(room.gender).toLowerCase() === "male").length;
+  const availableFemaleRoomCount = roomList.filter((room) => getRoomStatus(room.roomNumber) === "Available" && String(room.gender).toLowerCase() === "female").length;
   const occupiedRoomCount = roomList.filter((room) => getRoomStatus(room.roomNumber) === "Occupied").length;
-  const pendingBillCount = bills.filter((bill) => String(bill.status).toUpperCase() === "PENDING").length;
+  const pendingBills = bills.filter((bill) => ["PENDING", "REJECTED"].includes(String(bill.status).toUpperCase()));
+  const submittedBills = bills.filter((bill) => String(bill.status).toUpperCase() === "SUBMITTED");
+  const paidBills = bills.filter((bill) => String(bill.status).toUpperCase() === "PAID");
+  const pendingBillCount = pendingBills.length;
+  const submittedBillCount = submittedBills.length;
+  const paidBillTotal = paidBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0);
+  const pendingBillTotal = pendingBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0);
+  const occupancyRate = roomList.length ? Math.round((occupiedRoomCount / roomList.length) * 100) : 0;
+  const recentBills = [...bills].sort((a, b) => {
+    const aSubmitted = String(a.status).toUpperCase() === "SUBMITTED" ? 1 : 0;
+    const bSubmitted = String(b.status).toUpperCase() === "SUBMITTED" ? 1 : 0;
+    if (aSubmitted !== bSubmitted) return bSubmitted - aSubmitted;
+    const aDate = new Date(a.submittedAt || a.createdAt || a.dueDate || 0).getTime();
+    const bDate = new Date(b.submittedAt || b.createdAt || b.dueDate || 0).getTime();
+    return bDate - aDate;
+  });
 
   const handleHideBooking = (booking: any) => {
     setHiddenBookingIds((prev) => {
@@ -508,6 +705,7 @@ export default function AdminDashboard() {
   };
 
   const handleBookingStatus = async (booking: any, status: string) => {
+    setBookingActionId(booking.id);
     try {
       if (status === "Approved") {
         const alreadyOccupied = bookingRequests.some(
@@ -534,9 +732,12 @@ export default function AdminDashboard() {
       }
 
       await refresh();
+      setToast({ title: status === "Approved" ? "Booking approved" : "Booking request declined", description: `Room ${booking.roomNumber} has been updated.`, tone: "success" });
     } catch (error) {
       console.error("Failed to update booking:", error);
-      alert(error instanceof Error ? error.message : "Failed to update booking");
+      setToast({ title: "Booking update failed", description: error instanceof Error ? error.message : "Please try again.", tone: "error" });
+    } finally {
+      setBookingActionId(null);
     }
   };
 
@@ -553,65 +754,108 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="admin-dashboard min-h-screen overflow-x-hidden px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
+    <div className="admin-dashboard page-transition min-h-screen overflow-x-hidden px-4 py-5 text-slate-900 sm:px-6 sm:py-8">
       <div className="dashboard-container mx-auto max-w-7xl">
-        <div className="dashboard-header mb-6 flex flex-col gap-4 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-semibold tracking-[0.35em] text-blue-600 uppercase">
-              Unidorm
-            </p>
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
-              Admin Dashboard
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Manage rooms and review booking requests.
-            </p>
-          </div>
+        <div className="dashboard-header admin-titlebar mb-6 rounded-[2rem] border border-white/60 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-6">
+          <div className="admin-titlebar-layout">
+            <div className="admin-titlebar-brand min-w-0">
+              <p className="text-sm font-semibold tracking-[0.35em] uppercase">Unidorm</p>
+              <h1 className="mt-1 text-3xl font-bold">Admin Dashboard</h1>
+              <p className="mt-1 text-sm">Manage rooms, residents, payments and communication.</p>
+            </div>
 
-          <button
-            onClick={handleLogout}
-            className="rounded-2xl bg-red-600 px-5 py-3 font-semibold text-white shadow-lg shadow-red-200 transition hover:bg-red-700"
-          >
-            Logout
-          </button>
+            <nav className="admin-titlebar-nav dashboard-nav" aria-label="Admin management tabs">
+              {[
+                { key: "rooms", label: "Rooms" },
+                { key: "requests", label: "Bookings" },
+                { key: "announcements", label: "Announcements" },
+                { key: "payments", label: "Payments" },
+                { key: "chat", label: "Messages" },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-pressed={adminView === item.key}
+                  onClick={() => setAdminView(item.key as any)}
+                  className={`dashboard-tab relative rounded-md px-4 py-2 text-sm font-semibold transition ${adminView === item.key ? "is-active bg-white text-blue-600 shadow-sm" : "text-slate-600"} ${item.key === "chat" ? "pr-8" : ""}`}
+                >
+                  {item.label}
+                  {item.key === "chat" && chatThreads.some((thread: any) => hasUnreadThread(thread, selectedChatKey, adminId)) && (
+                    <span role="status" aria-label="Unread messages" className="absolute right-2 top-2 inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                  )}
+                </button>
+              ))}
+            </nav>
+
+            <div className="workspace-header-actions admin-titlebar-tools">
+              <NotificationCenter onNavigate={(target) => {
+                const nextView: Record<string, "rooms" | "requests" | "announcements" | "payments" | "chat"> = {
+                  "admin:rooms": "rooms",
+                  "admin:requests": "requests",
+                  "admin:announcements": "announcements",
+                  "admin:payments": "payments",
+                  "admin:chat": "chat",
+                };
+                if (target && nextView[target]) setAdminView(nextView[target]);
+              }} />
+              <LiveClock />
+              <div className="workspace-sync-copy">
+                <span className="workspace-sync-label">DATA SYNC</span>
+                <strong>{lastSyncedAt ? `Updated ${formatDateTime(lastSyncedAt)}` : "Waiting for first sync"}</strong>
+              </div>
+              <button type="button" onClick={() => void refresh()} disabled={isRefreshing} className="workspace-refresh-button">
+                <span className={isRefreshing ? "refresh-glyph is-spinning" : "refresh-glyph"}>↻</span>
+                {isRefreshing ? "Refreshing" : "Refresh"}
+              </button>
+              <button onClick={handleLogout} className="workspace-logout-button">
+                Logout <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <section className="dashboard-stats-grid" aria-label="Dormitory overview">
           <article className="dashboard-stat-card stat-blue"><span className="stat-symbol" aria-hidden="true">⌂</span><div><p>Total rooms</p><strong>{roomList.length}</strong><small>Across all buildings</small></div></article>
-          <article className="dashboard-stat-card stat-mint"><span className="stat-symbol" aria-hidden="true">✓</span><div><p>Available rooms</p><strong>{availableRoomCount}</strong><small>Ready for booking</small></div></article>
+          <article className="dashboard-stat-card stat-mint"><span className="stat-symbol" aria-hidden="true">✓</span><div><p>Available rooms</p><strong>{availableRoomCount}</strong><small>{availableMaleRoomCount} male · {availableFemaleRoomCount} female</small></div></article>
           <article className="dashboard-stat-card stat-amber"><span className="stat-symbol" aria-hidden="true">◷</span><div><p>Pending requests</p><strong>{pendingBookingRequests.length}</strong><small>Awaiting your review</small></div></article>
-          <article className="dashboard-stat-card stat-violet"><span className="stat-symbol" aria-hidden="true">฿</span><div><p>Pending bills</p><strong>{pendingBillCount}</strong><small>{occupiedRoomCount} occupied rooms</small></div></article>
+          <article className="dashboard-stat-card stat-violet"><span className="stat-symbol" aria-hidden="true">฿</span><div><p>Outstanding bills</p><strong>{pendingBillCount}</strong><small>{submittedBillCount} receipts awaiting review</small></div></article>
         </section>
 
-        <div className="dashboard-nav-wrap mb-7 rounded-[2rem] border border-white/60 bg-white/80 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-4">
-          <div className="dashboard-nav flex flex-wrap gap-2">
-            {[
-              { key: "rooms", label: "Room management", icon: "▦" },
-              { key: "requests", label: "Booking requests", icon: "◷" },
-              { key: "announcements", label: "Announcements", icon: "✳" },
-              { key: "payments", label: "Payments & bills", icon: "฿" },
-              { key: "chat", label: "Messages", icon: "▤" },
-            ].map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                aria-pressed={adminView === item.key}
-                onClick={() => setAdminView(item.key as any)}
-                className={`dashboard-tab rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                  adminView === item.key
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                } relative`}
-              >
-                <span className="dashboard-tab-icon" aria-hidden="true">{item.icon}</span>
-                <span>{item.label}</span>
-                {item.key === "chat" && chatThreads.some((thread: any) => hasUnreadThread(thread, chatReadTimes, selectedChatKey, adminId)) && (
-                  <span className="absolute right-3 top-3 inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-                )}
-              </button>
-            ))}
+        <section className="operations-overview" aria-label="Operations overview">
+          <div className="operations-card occupancy-card">
+            <div className="operations-card-heading">
+              <div><span className="operations-eyebrow">DORM CAPACITY</span><h2>Occupancy snapshot</h2></div>
+              <span className="operations-live-tag"><i /> LIVE DATA</span>
+            </div>
+            <div className="occupancy-content">
+              <div className="occupancy-ring" style={{ background: `conic-gradient(#5b73ee ${occupancyRate}%, #e8edf7 0)` }}>
+                <div><strong>{occupancyRate}%</strong><span>occupied</span></div>
+              </div>
+              <div className="occupancy-legend">
+                <div><span className="legend-dot dot-occupied" /><span>Occupied</span><strong>{occupiedRoomCount}</strong></div>
+                <div><span className="legend-dot dot-available" /><span>Available · {availableMaleRoomCount} Male / {availableFemaleRoomCount} Female</span><strong>{availableRoomCount}</strong></div>
+                <div><span className="legend-dot dot-reserved" /><span>Reserved</span><strong>{Math.max(roomList.length - occupiedRoomCount - availableRoomCount, 0)}</strong></div>
+              </div>
+            </div>
           </div>
-        </div>
+          <div className="operations-card finance-card">
+            <div className="operations-card-heading">
+              <div><span className="operations-eyebrow">PAYMENT OVERVIEW</span><h2>Collection summary</h2></div>
+              <span className="finance-icon">฿</span>
+            </div>
+            <div className="finance-total-row"><span>Recorded as paid</span><strong>฿{paidBillTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></div>
+            <div className="finance-progress-track"><span style={{ width: `${paidBillTotal + pendingBillTotal > 0 ? (paidBillTotal / (paidBillTotal + pendingBillTotal)) * 100 : 0}%` }} /></div>
+            <div className="finance-foot-row"><span><i className="legend-dot dot-paid" /> {paidBills.length} verified bills</span><strong>฿{pendingBillTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} outstanding</strong></div>
+            <button type="button" className="text-link-button" onClick={() => setAdminView("payments")}>Open payment ledger <span>↗</span></button>
+          </div>
+          <div className="operations-card attention-card">
+            <div className="operations-card-heading"><div><span className="operations-eyebrow">NEEDS ATTENTION</span><h2>Action queue & updates</h2></div><span className="attention-count">{pendingBookingRequests.length + pendingBillCount + submittedBillCount}</span></div>
+            <div className="attention-row"><span className="attention-symbol booking-symbol">⌂</span><div><strong>{pendingBookingRequests.length} booking requests</strong><small>Waiting for your review</small></div><button type="button" onClick={() => setAdminView("requests")}>Review</button></div>
+            <div className="attention-row"><span className="attention-symbol bill-symbol">฿</span><div><strong>{pendingBillCount} outstanding bills</strong><small>Awaiting payment or corrected proof</small></div><button type="button" onClick={() => setAdminView("payments")}>View</button></div>
+            <div className="attention-row"><span className="attention-symbol bill-symbol">✓</span><div><strong>{submittedBillCount} payment proofs</strong><small>Waiting for administrator verification</small></div><button type="button" onClick={() => setAdminView("payments")}>Review</button></div>
+            <div className="attention-row"><span className="attention-symbol announcement-symbol">✳</span><div><strong>{announcements.length} announcements</strong><small>Published dorm updates</small></div><button type="button" onClick={() => setAdminView("announcements")}>Open</button></div>
+          </div>
+        </section>
 
         {adminView === "rooms" && (
           <div className="grid gap-8 lg:grid-cols-3">
@@ -749,6 +993,7 @@ export default function AdminDashboard() {
                           <p className="mt-2 text-sm font-semibold text-blue-600">
                             {Number(r.price).toLocaleString()} THB
                           </p>
+                          <p className="mt-2 text-xs text-slate-400">Added {formatDateTime(r.createdAt)} · Updated {formatDateTime(r.updatedAt)}</p>
 
                           {roomStatus !== "Available" && (
                             <span
@@ -856,6 +1101,7 @@ export default function AdminDashboard() {
                           {b.type} • {b.furniture} •{" "}
                           {Number(b.price).toLocaleString()} THB
                         </p>
+                        <p className="mt-2 text-xs text-slate-400">Submitted {formatDateTime(b.createdAt)} · Updated {formatDateTime(b.updatedAt)}</p>
                       </div>
                     </div>
 
@@ -887,15 +1133,17 @@ export default function AdminDashboard() {
                     <div className="mt-4 flex gap-3">
                       <button
                         onClick={() => handleBookingStatus(b, "Approved")}
-                        className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
+                        disabled={bookingActionId === b.id}
+                        className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:opacity-60"
                       >
-                        Approve
+                        {bookingActionId === b.id ? "Updating…" : "Approve"}
                       </button>
                       <button
                         onClick={() => handleBookingStatus(b, "Rejected")}
-                        className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+                        disabled={bookingActionId === b.id}
+                        className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60"
                       >
-                        Reject
+                        {bookingActionId === b.id ? "Updating…" : "Reject"}
                       </button>
                     </div>
                   </div>
@@ -919,7 +1167,7 @@ export default function AdminDashboard() {
                 </p>
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="announcements-workspace-grid grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
                 <div className="dashboard-panel rounded-2xl border border-slate-200 bg-slate-50 p-6">
                   <div className="space-y-4">
                     <div>
@@ -970,11 +1218,33 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={createAnnouncement}
-                      className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                      disabled={isPublishingAnnouncement}
+                      aria-busy={isPublishingAnnouncement}
+                      className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Publish Announcement
+                      {isPublishingAnnouncement ? "Publishing…" : "Publish Announcement"}
                     </button>
                   </div>
+                </div>
+
+                <div className="announcements-list-panel min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div><h3 className="text-xl font-bold text-slate-900">Published announcements</h3><p className="text-sm text-slate-500">Your recently created dorm updates.</p></div>
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{announcements.length} published</span>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {announcements.map((announcement) => (
+                    <article key={announcement.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <h4 className="font-bold text-slate-900">{announcement.title}</h4>
+                        <span className="shrink-0 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700">{announcement.audience === "ALL" ? "All residents" : announcement.audience === "MALE" ? "Male residents" : "Female residents"}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">{announcement.content}</p>
+                      <p className="mt-4 text-xs text-slate-400">{announcement.createdAt ? formatDateTime(announcement.createdAt) : "Published"}</p>
+                    </article>
+                  ))}
+                  {announcements.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-400">No announcements have been published yet.</p>}
+                </div>
                 </div>
               </div>
             </section>
@@ -982,17 +1252,22 @@ export default function AdminDashboard() {
 
         {adminView === "payments" && (
           <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-slate-900">Payments</h2>
-              <p className="text-sm text-slate-500">
-                Publish payment requests for students.
-              </p>
+            <div className="payments-panel-heading mb-6">
+              <div><span className="operations-eyebrow">BILLING CONTROL</span><h2 className="text-2xl font-bold text-slate-900">Payments & transactions</h2>
+                <p className="text-sm text-slate-500">Create student bills and review the current payment ledger.</p></div>
+              <div className="payment-ledger-badge"><span className="payment-ledger-pulse" /> {bills.length} records</div>
+            </div>
+            <div className="ledger-summary-grid">
+              <div><span>Verified collected</span><strong>฿{paidBillTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><small>{paidBills.length} verified records</small></div>
+              <div><span>Awaiting verification</span><strong>{submittedBillCount}</strong><small>Submitted receipts to review</small></div>
+              <div><span>Outstanding</span><strong>฿{pendingBillTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><small>{pendingBills.length} unpaid records</small></div>
             </div>
             <div className="dashboard-panel rounded-2xl border border-slate-200 bg-white p-6">
               <div className="space-y-4">
                 <div>
-                  <label className={labelClass}>Student ID</label>
+                  <label className={labelClass}>Student ID *</label>
                   <input
+                    required
                     className={inputClass}
                     value={paymentForm.studentId}
                     onChange={(e) =>
@@ -1006,8 +1281,9 @@ export default function AdminDashboard() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className={labelClass}>Category</label>
+                    <label className={labelClass}>Category *</label>
                     <select
+                      required
                       className={inputClass}
                       value={paymentForm.category}
                       onChange={(e) =>
@@ -1023,8 +1299,9 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Cycle</label>
+                    <label className={labelClass}>Cycle *</label>
                     <select
+                      required
                       className={inputClass}
                       value={paymentForm.cycle}
                       onChange={(e) =>
@@ -1040,8 +1317,9 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelClass}>Billing Label</label>
+                  <label className={labelClass}>Billing Label *</label>
                   <input
+                    required
                     className={inputClass}
                     value={paymentForm.billingLabel}
                     onChange={(e) =>
@@ -1055,9 +1333,12 @@ export default function AdminDashboard() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className={labelClass}>Amount</label>
+                    <label className={labelClass}>Amount *</label>
                     <input
                       type="number"
+                      required
+                      min="0.01"
+                      step="0.01"
                       className={inputClass}
                       value={paymentForm.amount}
                       onChange={(e) =>
@@ -1070,9 +1351,10 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>Due Date</label>
+                    <label className={labelClass}>Due Date & Time *</label>
                     <input
-                      type="date"
+                      required
+                      type="datetime-local"
                       className={inputClass}
                       value={paymentForm.dueDate}
                       onChange={(e) =>
@@ -1085,8 +1367,10 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div>
-                  <label className={labelClass}>Room Number</label>
+                  <label className={labelClass}>Room Number *</label>
                   <input
+                    required
+                    style={{ textTransform: "uppercase" }}
                     className={inputClass}
                     value={paymentForm.roomNumber}
                     onChange={(e) =>
@@ -1103,20 +1387,42 @@ export default function AdminDashboard() {
                   onClick={createBill}
                   className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                 >
-                  Create Bill
+                  Create bill <span aria-hidden="true">↗</span>
                 </button>
               </div>
+            </div>
+            <div className="transaction-ledger-wrap">
+              <div className="transaction-ledger-heading"><div><h3>Payment verification & bill activity</h3><p>{submittedBillCount} payment submissions awaiting administrator review</p></div><span>LIVE LEDGER</span></div>
+              {recentBills.length ? <div className="transaction-list">
+                {recentBills.map((bill) => {
+                  const status = String(bill.status).toUpperCase();
+                  return (
+                    <article className="transaction-row payment-review-row" key={bill.id}>
+                      <span className={`transaction-icon ${status === "PAID" ? "transaction-paid" : status === "SUBMITTED" ? "transaction-submitted" : "transaction-pending"}`}>{String(bill.category).toUpperCase() === "ELECTRIC" ? "ϟ" : String(bill.category).toUpperCase() === "WATER" ? "◉" : "⌂"}</span>
+                      <div className="transaction-main"><strong>{bill.billingLabel || `${bill.category} bill`}</strong><span>#{bill.id} · {bill.studentId || "Student"} · Room {bill.roomNumber || "—"}</span>
+                        {status === "SUBMITTED" ? <small>Reference: {bill.paymentReference || "—"} · Submitted {bill.submittedAt ? formatDateTime(bill.submittedAt) : "just now"}</small> : null}
+                        {status === "SUBMITTED" && bill.paymentNote ? <small>Student note: {bill.paymentNote}</small> : null}
+                        {status === "REJECTED" && bill.rejectionReason ? <small className="text-rose-600">Rejected: {bill.rejectionReason}</small> : null}
+                      </div>
+                      <div className="transaction-amount"><strong>฿{Number(bill.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><span>{status === "PAID" && bill.paidAt ? `Verified ${formatDateTime(bill.paidAt)}` : bill.dueDate ? `Due ${formatDateTime(bill.dueDate)}` : "No due date"}</span><small className="block text-[11px] text-slate-400">Created {formatDateTime(bill.createdAt)}</small></div>
+                      <span className={`transaction-status ${status === "PAID" ? "status-settled" : status === "SUBMITTED" ? "status-submitted" : status === "REJECTED" ? "status-rejected" : "status-awaiting"}`}>{status === "PAID" ? "Verified" : status === "SUBMITTED" ? "Review" : status === "REJECTED" ? "Rejected" : "Outstanding"}</span>
+                      {status === "SUBMITTED" ? <div className="payment-review-actions"><button type="button" onClick={() => void openPaymentProof(bill)}>View proof</button><button type="button" onClick={() => void reviewPayment(bill, "APPROVE")}>Verify</button><button type="button" onClick={() => void reviewPayment(bill, "REJECT")}>Reject</button></div> : null}
+                      {Array.isArray(bill.submissions) && bill.submissions.length > 0 ? <details className="payment-submission-history"><summary>Receipt history ({bill.submissions.length})</summary><div className="payment-submission-history-list">{bill.submissions.map((submission: any) => <div className="payment-submission-history-item" key={submission.id}><div><strong>{submission.paymentReference}</strong><span>{String(submission.status).toUpperCase()} · Submitted {formatDateTime(submission.submittedAt)}</span>{submission.reviewedAt ? <span>Reviewed {formatDateTime(submission.reviewedAt)}{submission.reviewer?.name ? ` by ${submission.reviewer.name}` : ""}</span> : null}{submission.rejectionReason ? <span className="text-rose-600">Reason: {submission.rejectionReason}</span> : null}</div><button type="button" onClick={() => void openPaymentSubmissionProof(bill.id, submission)}>View receipt</button></div>)}</div></details> : null}
+                    </article>
+                  );
+                })}
+              </div> : <div className="transaction-empty"><span>฿</span><strong>No transactions yet</strong><p>New student bills will appear here after they are created.</p></div>}
             </div>
           </section>
         )}
 
         {adminView === "chat" && (
-          <>
-            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+          <div className="admin-chat-layout">
+            <section className="dashboard-panel chat-management-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Messaging & Chat</h2>
                 <p className="text-sm text-slate-500">
-                  Create group chats, request direct chats with students, and manage messages.
+                  Create group chats and message students directly.
                 </p>
               </div>
 
@@ -1157,7 +1463,7 @@ export default function AdminDashboard() {
                         className={`${inputClass} min-h-[120px] resize-none`}
                         value={firstChatMessage}
                         onChange={(e) => setFirstChatMessage(e.target.value)}
-                        placeholder="Type the initial chat request message"
+                        placeholder="Type an optional first message"
                       />
                     </div>
                     <button
@@ -1165,7 +1471,7 @@ export default function AdminDashboard() {
                       onClick={createDirectChat}
                       className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                     >
-                      Send Direct Chat Request
+                      Open Direct Chat
                     </button>
                   </div>
                 </div>
@@ -1189,8 +1495,9 @@ export default function AdminDashboard() {
                                 ? `${thread.audienceGender} Group`
                                 : `Direct to ${thread.studentId}`}
                             </p>
+                            <p className="mt-1 text-xs text-slate-400">{thread.lastMessage ? `Last activity ${formatDateTime(thread.lastMessage.createdAt)}` : `Created ${formatDateTime(thread.createdAt)}`}</p>
                           </div>
-                          {hasUnreadThread(thread, chatReadTimes, selectedChatKey, adminId) && (
+                          {hasUnreadThread(thread, selectedChatKey, adminId) && (
                             <span className="absolute right-4 top-4 h-3.5 w-3.5 rounded-full bg-red-500 ring-2 ring-white" />
                           )}
                         </button>
@@ -1211,7 +1518,7 @@ export default function AdminDashboard() {
               </div>
             </section>
 
-            <section className="dashboard-panel rounded-[2rem] border border-white/60 bg-white/80 p-8 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+            <section className="dashboard-panel selected-chat-panel rounded-[2rem] border border-white/60 bg-white/80 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl sm:p-8">
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-slate-900">Selected Chat</h2>
                 <p className="text-sm text-slate-500">
@@ -1220,8 +1527,8 @@ export default function AdminDashboard() {
               </div>
 
               {selectedChatKey ? (
-                <div className="space-y-4">
-                  <div className="dashboard-panel rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                <div className="selected-chat-content space-y-4">
+                  <div className="dashboard-panel selected-chat-thread rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <div>
                         <p className="text-lg font-semibold text-slate-900">
@@ -1229,19 +1536,14 @@ export default function AdminDashboard() {
                             ? `${chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.audienceGender} Group Chat`
                             : "Direct Chat"}
                         </p>
-                        {chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.type === "DIRECT" && (
-                          <p className="text-sm text-slate-500">
-                            {chatThreads.find((thread) => thread.chatKey === selectedChatKey)?.status}
-                          </p>
-                        )}
                       </div>
                     </div>
 
-                    <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
+                    <div className="chat-message-list space-y-3 max-h-[420px] overflow-y-auto pr-2">
                       {chatMessages.map((message) => (
                         <div
                           key={message.id}
-                          className={`rounded-2xl p-4 ${
+                          className={`chat-message-bubble max-w-[min(82%,680px)] rounded-2xl p-4 ${
                             message.senderRole === "admin"
                               ? "bg-slate-100 text-slate-900"
                               : "bg-blue-50 text-slate-900"
@@ -1252,7 +1554,8 @@ export default function AdminDashboard() {
                               ? `Admin - ${message.senderId}`
                               : message.senderId}
                           </p>
-                          <p className="mt-2 text-sm leading-6">{message.content}</p>
+                          <p className="mt-2 text-sm leading-6 break-words">{message.content}</p>
+                          <p className="mt-2 text-[11px] text-slate-400">{formatDateTime(message.createdAt)}</p>
                         </div>
                       ))}
 
@@ -1261,22 +1564,21 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    <div className="mt-4 flex gap-3">
+                    <form className="chat-composer mt-4 flex gap-3" onSubmit={(event) => { event.preventDefault(); void sendChatMessage(); }}>
                       <input
                         type="text"
                         value={newChatMessage}
                         onChange={(e) => setNewChatMessage(e.target.value)}
                         placeholder="Type message..."
-                        className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+                        className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
                       />
                       <button
-                        type="button"
-                        onClick={sendChatMessage}
+                        type="submit"
                         className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
                       >
                         Send
                       </button>
-                    </div>
+                    </form>
                   </div>
                 </div>
               ) : (
@@ -1285,9 +1587,10 @@ export default function AdminDashboard() {
                 </div>
               )}
             </section>
-          </>
+          </div>
         )}
       </div>
+      <ToastViewport toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

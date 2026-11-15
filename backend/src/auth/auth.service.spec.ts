@@ -1,4 +1,4 @@
-﻿import { ForbiddenException } from "@nestjs/common";
+﻿import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as bcrypt from "bcrypt";
@@ -52,6 +52,18 @@ describe("AuthService", () => {
         password: "ValidPass!1",
       }),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  it("rejects passwords longer than bcrypt's 72-byte input limit before comparison", async () => {
+    const longUtf8Password = "é".repeat(37);
+
+    await expect(service.login({
+      role: "student",
+      studentId: "6830613001",
+      password: longUtf8Password,
+    })).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(bcrypt.compare).not.toHaveBeenCalled();
   });
 
   it("returns a signed token without returning the stored password hash", async () => {

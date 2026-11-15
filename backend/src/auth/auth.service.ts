@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
@@ -45,10 +46,13 @@ export class AuthService {
       throw new BadRequestException("Email must be a valid @gmail.com address");
     }
 
-    if (!data?.password || !PASSWORD_REGEX.test(data.password)) {
+    if (typeof data?.password !== "string" || !PASSWORD_REGEX.test(data.password)) {
       throw new BadRequestException(
         "Password must be at least 8 characters and include 1 lowercase letter, 1 uppercase letter, and 1 symbol",
       );
+    }
+    if (Buffer.byteLength(data.password, "utf8") > 72) {
+      throw new BadRequestException("Password must not exceed 72 UTF-8 bytes");
     }
 
     if (data.role === "admin") {
@@ -88,17 +92,24 @@ export class AuthService {
         throw new BadRequestException("This student ID is already registered");
       }
 
-      await this.prisma.user.create({
-        data: {
-          role: "student",
-          name: data.name.trim(),
-          email,
-          studentId,
-          adminId: null,
-          gender: data.gender,
-          password: hashedPassword,
-        },
-      });
+      try {
+        await this.prisma.user.create({
+          data: {
+            role: "student",
+            name: data.name.trim(),
+            email,
+            studentId,
+            adminId: null,
+            gender: data.gender,
+            password: hashedPassword,
+          },
+        });
+      } catch (error) {
+        if ((error as { code?: string })?.code === "P2002") {
+          throw new ConflictException("This email address or student ID is already registered");
+        }
+        throw error;
+      }
 
       return {
         message: "Student registered successfully",
@@ -123,17 +134,24 @@ export class AuthService {
       throw new BadRequestException("Maximum 10 admins allowed");
     }
 
-    await this.prisma.user.create({
-      data: {
-        role: "admin",
-        name: data.name.trim(),
-        email,
-        studentId: null,
-        adminId: nextAdminId,
-        gender: null,
-        password: hashedPassword,
-      },
-    });
+    try {
+      await this.prisma.user.create({
+        data: {
+          role: "admin",
+          name: data.name.trim(),
+          email,
+          studentId: null,
+          adminId: nextAdminId,
+          gender: null,
+          password: hashedPassword,
+        },
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code === "P2002") {
+        throw new ConflictException("This email address or administrator ID is already registered. Please retry registration.");
+      }
+      throw error;
+    }
 
     return {
       message: "Admin registered successfully",
@@ -149,6 +167,9 @@ export class AuthService {
 
     if (!data?.password) {
       throw new BadRequestException("Password is required");
+    }
+    if (typeof data.password !== "string" || Buffer.byteLength(data.password, "utf8") > 72) {
+      throw new BadRequestException("Password must not exceed 72 UTF-8 bytes");
     }
 
     let user;

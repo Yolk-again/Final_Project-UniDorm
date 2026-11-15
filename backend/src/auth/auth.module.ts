@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -9,9 +10,19 @@ import { JwtAuthGuard, RolesGuard } from "./auth.guard";
 @Module({
   imports: [
     PrismaModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || "unidorm-local-development-secret-change-before-deploy",
-      signOptions: { expiresIn: "8h" },
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const configuredSecret = configService.get<string>("JWT_SECRET");
+        if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSecret.length < 32)) {
+          throw new Error("Production JWT_SECRET must contain at least 32 characters");
+        }
+        return {
+          secret: configuredSecret || "unidorm-local-development-secret-change-before-deploy",
+          signOptions: { expiresIn: "8h" },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

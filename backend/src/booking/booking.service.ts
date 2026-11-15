@@ -4,9 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { BookingStatus, Prisma } from "@prisma/client";
+import { BookingStatus, NotificationType, Prisma } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/auth.guard";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 const ACTIVE_BOOKING_STATUSES = ["Pending", "Approved"] as const;
 
@@ -19,7 +20,10 @@ function normalizeGender(value?: string | null) {
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async getBookings(user: AuthenticatedUser) {
     const bookings = await this.prisma.booking.findMany({
@@ -48,7 +52,7 @@ export class BookingService {
     if (!roomNumber) throw new BadRequestException("Room number is required");
 
     try {
-      return await this.prisma.$transaction(
+      const booking = await this.prisma.$transaction(
         async (tx) => {
           const student = await tx.user.findFirst({
             where: { role: "student", studentId },
@@ -99,9 +103,17 @@ export class BookingService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      await this.notifications.notifyAdmins({
+        type: NotificationType.BOOKING_REQUESTED,
+        title: "New room booking request",
+        message: `Student ${studentId} requested room ${roomNumber}.`,
+        link: "admin:requests",
+        entityId: booking.id,
+      });
+      return booking;
     } catch (error) {
-      if ((error as { code?: string })?.code === "P2034") {
-        throw new BadRequestException("Another booking was processed at the same time. Please try again");
+      if (["P2034", "P2002"].includes((error as { code?: string })?.code ?? "")) {
+        throw new BadRequestException("This room or student already has an active booking. Refresh availability and try again");
       }
       throw error;
     }
@@ -113,10 +125,13 @@ export class BookingService {
     }
 
     try {
-      return await this.prisma.$transaction(
+      const updatedBooking = await this.prisma.$transaction(
         async (tx) => {
           const booking = await tx.booking.findUnique({ where: { id } });
           if (!booking) throw new NotFoundException("Booking not found");
+          if (booking.status !== "Pending") {
+            throw new BadRequestException("Only pending booking requests can be reviewed");
+          }
 
           if (status === "Approved") {
             const occupied = await tx.booking.findFirst({
@@ -139,28 +154,59 @@ export class BookingService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      await this.notifications.notifyStudent(updatedBooking.studentId, {
+        type: updatedBooking.status === "Approved" ? NotificationType.BOOKING_APPROVED : NotificationType.BOOKING_REJECTED,
+        title: updatedBooking.status === "Approved" ? "Your room booking was approved" : "Your room booking was declined",
+        message: updatedBooking.status === "Approved"
+          ? `Your booking for room ${updatedBooking.roomNumber} has been approved. View your stay for the next steps.`
+          : `Your booking request for room ${updatedBooking.roomNumber} was not approved. You can review the booking status and choose another room.`,
+        link: "student:booking",
+        entityId: updatedBooking.id,
+      });
+      return updatedBooking;
     } catch (error) {
-      if ((error as { code?: string })?.code === "P2034") {
-        throw new BadRequestException("Another booking update happened at the same time. Refresh and try again");
+      if (["P2034", "P2002"].includes((error as { code?: string })?.code ?? "")) {
+        throw new BadRequestException("Another active booking was recorded for this student or room. Refresh and review the booking again");
       }
       throw error;
     }
   }
 
   async deleteBooking(id: number, user: AuthenticatedUser) {
-    const booking = await this.prisma.booking.findUnique({ where: { id } });
-    if (!booking) throw new NotFoundException("Booking not found");
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const booking = await tx.booking.findUnique({ where: { id } });
+          if (!booking) throw new NotFoundException("Booking not found");
 
-    if (user.role === "student") {
-      if (!user.studentId || booking.studentId !== user.studentId) {
-        throw new ForbiddenException("You can only manage your own booking");
-      }
+          if (user.role === "student" && (!user.studentId || booking.studentId !== user.studentId)) {
+            throw new ForbiddenException("You can only manage your own booking");
+          }
 
-      if (booking.status === "Approved") {
-        throw new BadRequestException("Contact the dormitory administrator to cancel an approved booking");
+          if (booking.status === "Approved") {
+            throw new BadRequestException("Approved bookings cannot be deleted. Contact the dormitory administrator to arrange a cancellation");
+          }
+
+          const result = await tx.booking.deleteMany({
+            where: {
+              id,
+              status: booking.status,
+              ...(user.role === "student" ? { studentId: user.studentId ?? "" } : {}),
+            },
+          });
+          if (result.count !== 1) {
+            throw new BadRequestException("The booking changed while it was being removed. Refresh and try again");
+          }
+
+          return { id, removed: true };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if ((error as { code?: string })?.code === "P2034") {
+        throw new BadRequestException("The booking status changed while it was being removed. Refresh and try again");
       }
+      throw error;
     }
-
-    return this.prisma.booking.delete({ where: { id } });
   }
 }

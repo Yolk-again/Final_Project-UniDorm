@@ -12,7 +12,7 @@ export default function HomePage() {
   const router = useRouter();
 
   return (
-    <main className="landing-page">
+    <main className="landing-page page-transition">
       <div className="landing-orb landing-orb-one" aria-hidden="true" />
       <div className="landing-orb landing-orb-two" aria-hidden="true" />
       <nav className="landing-nav" aria-label="Main navigation">

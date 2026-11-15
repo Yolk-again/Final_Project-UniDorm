@@ -4,12 +4,15 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Put,
   Req,
 } from "@nestjs/common";
 import { AuthenticatedUser, Roles } from "../auth/auth.guard";
 import { BookingService } from "./booking.service";
+import { CreateBookingDto } from "./dto/create-booking.dto";
+import { UpdateBookingStatusDto } from "./dto/update-booking-status.dto";
 
 type RequestWithUser = { user: AuthenticatedUser };
 
@@ -25,7 +28,7 @@ export class BookingController {
 
   @Post()
   @Roles("student")
-  createBooking(@Req() request: RequestWithUser, @Body() data: any) {
+  createBooking(@Req() request: RequestWithUser, @Body() data: CreateBookingDto) {
     return this.bookingService.createBooking({
       ...data,
       studentId: request.user.studentId,
@@ -34,13 +37,13 @@ export class BookingController {
 
   @Put(":id")
   @Roles("admin")
-  updateStatus(@Param("id") id: string, @Body() body: any) {
-    return this.bookingService.updateStatus(Number(id), body.status);
+  updateStatus(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBookingStatusDto) {
+    return this.bookingService.updateStatus(id, body.status);
   }
 
   @Delete(":id")
   @Roles("student", "admin")
-  deleteBooking(@Req() request: RequestWithUser, @Param("id") id: string) {
-    return this.bookingService.deleteBooking(Number(id), request.user);
+  deleteBooking(@Req() request: RequestWithUser, @Param("id", ParseIntPipe) id: number) {
+    return this.bookingService.deleteBooking(id, request.user);
   }
 }

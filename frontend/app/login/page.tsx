@@ -132,7 +132,7 @@ export default function LoginPage() {
       console.error(error);
       setErrors((prev) => ({
         ...prev,
-        form: "Something went wrong",
+        form: error instanceof Error ? error.message : "Unable to reach the UniDorm server. Check that the backend is running on port 3001.",
       }));
     } finally {
       setLoading(false);

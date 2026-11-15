@@ -1,3 +1,11 @@
+# UniDorm Round 11 — Notifications update
+
+This source package includes a persistent in-app notification center for students and administrators. See `ROUND-11-NOTIFICATIONS-UPDATE.md`, `NOTIFICATION-API.md`, and `ROUND-11-POWERSHELL-TESTING.md` for event coverage, endpoints, migration and test instructions.
+
+New Prisma migration: `20261115100000_add_in_app_notifications`.
+
+---
+
 # UniDorm
 
 UniDorm is a dormitory management application with student and administrator areas for room discovery, room bookings, announcements, direct and group messaging, and payment-bill tracking.
@@ -53,12 +61,12 @@ Open a second terminal in `frontend`:
 ```powershell
 Copy-Item .env.example .env.local
 npm ci
-npm run dev
+npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-The default frontend API URL is `http://localhost:3001`. Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` when the API is hosted elsewhere. Restart the Next.js server after changing environment variables.
+The default frontend API URL is `http://127.0.0.1:3001`. Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` when the API is hosted elsewhere. Restart the Next.js server after changing environment variables. Keep the backend on port 3001 and the frontend on port 3000.
 
-Open `http://localhost:3000`.
+Open `http://127.0.0.1:3000`.
 
 ## Build and test
 
@@ -84,10 +92,15 @@ npm run lint
 - Student registration and login using student IDs.
 - Admin registration with a private setup key and generated admin IDs.
 - Room catalogue and gender-appropriate room selection.
-- Booking requests, admin approval/rejection, and booking history.
-- Audience-filtered dorm announcements.
-- Gender group chats and direct admin/student chat requests.
-- Student-specific bill lists and admin bill creation.
+- Booking requests, admin approval/rejection, booking history, and database-level prevention of concurrent active bookings.
+- Audience-filtered dorm announcements with student-specific read receipts.
+- Gender group chats and immediately available direct admin/student conversations.
+- Student-specific bills and manually verified payment submissions with receipt/review history.
+- Role-protected API routes with strict request DTO validation and room/booking/bill data-integrity checks.
+
+## Production readiness and manual payments
+
+See `README-PRODUCTION-READINESS.md` for the payment lifecycle, operational requirements, and deployment limitations. See `PRODUCTION-READINESS-POWERSHELL.md` for the PowerShell 5.1 backup, migration, build, and test procedure. Manual receipt uploads are never marked paid automatically; an admin must check the receipt against the actual payment record.
 
 ## Payment note
 
@@ -100,3 +113,55 @@ The current payment workflow is a bill-status tracker. The student action record
 - Student booking, bill, and chat access is restricted by the authenticated account.
 - Password hashes are never returned by login.
 - Configure secrets through local environment files, not source code.
+
+## Remove an old nested project folder
+
+If an earlier extraction left a second `Final_Project-UniDorm` folder inside the project, run `RUN-CLEANUP.cmd` from the outer project root. The launcher uses a process-only PowerShell execution-policy bypass; it does not change Windows execution-policy settings. The script makes a backup beside the project before removing the duplicate. See `PROJECT-FOLDER-CLEANUP.md`.
+
+
+## Latest admin navigation and chat read receipt update
+
+This package also includes the admin title-bar segmented tabs matching the student dashboard exactly, and a server-backed admin chat read receipt fix. See `CHAT-READ-RECEIPT-AND-ADMIN-TABS-FIX.md` for details and `POWERSHELL_TESTING.md` for local verification steps. No new Prisma migration is needed; the existing `adminLastReadAt` migration is retained.
+
+
+## Fixing the chat read-receipt backend build
+
+If the build complains that `adminLastReadAt` is missing from generated Prisma types, run `FIX-CHAT-READ-RECEIPT.ps1` from this project root. It applies pending Prisma migrations, regenerates Prisma Client, rebuilds the backend, and starts it. See `CHAT-READ-RECEIPT-PRISMA-CLIENT-FIX.md`.
+
+
+## Round 8 chat and date/time update
+
+Run pending migrations and regenerate Prisma Client before building the API:
+
+```powershell
+cd backend
+.\node_modules\.bin\prisma.cmd migrate deploy
+.\node_modules\.bin\prisma.cmd generate
+npm run build
+```
+
+The update records read receipts per account and chat, removes direct-chat request states, and adds date/time information to room listings, bookings, bills, announcements, chat activity, and messages. No database reset is required.
+
+## Announcement read route 404
+
+If the student UI reports `Cannot PATCH /announcements/:id/read`, use `FIX-ANNOUNCEMENT-READ.ps1` from the project root to rebuild and start the backend from the current source, then run `VERIFY-ANNOUNCEMENT-READ-ROUTE.ps1` in a second terminal. See `README-ANNOUNCEMENT-ROUTE-404-FIX.md`.
+
+## Announcement publishing fix
+
+The admin announcement form now prevents duplicate/rapid submissions, validates trimmed title and content before sending, disables the publish button while saving, and displays clear success/error feedback. See `ANNOUNCEMENT-PUBLISH-DUPLICATE-SUBMISSION-FIX.md`.
+
+
+## Production-readiness foundation update
+
+This package adds manual payment verification (student receipt submission, admin review, resubmission history), precise decimal monetary storage, stricter DTO validation, server-derived identities, safer room/booking writes, database constraints for core booking and bill references, and a database readiness endpoint at `/health/ready`. Review `README-PRODUCTION-READINESS.md` and follow `PRODUCTION-READINESS-POWERSHELL.md` before applying the two new migrations. Back up PostgreSQL and the private payment-proof directory together. Do not run `prisma migrate reset`. This is a production-readiness foundation, not a claim that external HTTPS/rate-limiting/backups/monitoring/retention infrastructure has already been configured.
+
+For the current production-readiness foundation and manual payment workflow, see `ROUND-10-PRODUCTION-READINESS-UPDATE.md`, `ROUND-10-POWERSHELL-TESTING.md`, `README-PRODUCTION-READINESS.md`, and `PRODUCTION-READINESS-POWERSHELL.md`. The update introduces two additional Prisma migrations; back up the PostgreSQL database and private receipt files before applying them. A new `/health/ready` endpoint checks PostgreSQL connectivity.
+
+## Round 10 migration recovery
+
+If `migrate deploy` previously failed on `20261115060000_enforce_core_data_integrity` due to historical bills referencing deleted rooms, use `FIX-ROUND10-MIGRATION.ps1`. It resolves only that failed migration as rolled back, deploys the corrected migration, regenerates Prisma Client, builds, and runs backend tests. Read `ROUND-10-MIGRATION-AND-BUILD-REPAIR.md` before running it. Never reset the database to resolve this issue.
+
+
+## Round 12 — Student bill notification indicator
+
+The student Payments tab shows a persistent red unread dot when a new bill is assigned to that student. Opening Payments marks that student's bill-created notifications as read through authenticated, user-scoped endpoints. See `ROUND-12-STUDENT-BILL-RED-DOT-UPDATE.md` and `ROUND-12-POWERSHELL-TESTING.md`. No migration is required.

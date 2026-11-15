@@ -48,7 +48,28 @@ enum PaymentCycle {
 
 enum PaymentStatus {
   PENDING
+  SUBMITTED
   PAID
+  REJECTED
+}
+
+enum PaymentSubmissionStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  BILL_CREATED
+  PAYMENT_SUBMITTED
+  PAYMENT_APPROVED
+  PAYMENT_REJECTED
+  BOOKING_REQUESTED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+  ANNOUNCEMENT_PUBLISHED
+  CHAT_MESSAGE
+  ROOM_AVAILABLE
 }
 
 model User {
@@ -62,6 +83,12 @@ model User {
   role       Role
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
+  announcementReadReceipts AnnouncementReadReceipt[]
+  verifiedPaymentBills PaymentBill[] @relation("PaymentBillVerifiedBy")
+  reviewedPaymentSubmissions PaymentSubmission[] @relation("PaymentSubmissionReviewedBy")
+  bookings Booking[]
+  paymentBills PaymentBill[] @relation("PaymentBillStudent")
+  notifications Notification[]
 
   @@index([role, createdAt])
 }
@@ -72,9 +99,11 @@ model Room {
   gender     String?
   type       String
   furniture  String
-  price      Float
+  price      Decimal  @db.Decimal(10, 2)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
+  bookings   Booking[]
+  paymentBills PaymentBill[]
 
   @@index([gender, roomNumber])
 }
@@ -85,10 +114,12 @@ model Booking {
   roomNumber String
   type       String
   furniture  String
-  price      Float
+  price      Decimal       @db.Decimal(10, 2)
   status     BookingStatus @default(Pending)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @default(now())  @updatedAt
+  student    User          @relation(fields: [studentId], references: [studentId], onDelete: Restrict, onUpdate: Cascade)
+  room       Room          @relation(fields: [roomNumber], references: [roomNumber], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([studentId, status])
   @@index([roomNumber, status])
@@ -102,8 +133,23 @@ model Announcement {
   createdBy   String
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @default(now()) @updatedAt
+  readReceipts AnnouncementReadReceipt[]
 
   @@index([audience, createdAt])
+}
+
+model AnnouncementReadReceipt {
+  id             Int          @id @default(autoincrement())
+  announcementId Int
+  userId         Int
+  readAt         DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId, readAt])
 }
 
 model ChatThread {
@@ -114,6 +160,8 @@ model ChatThread {
   studentId    String?
   adminId      String?
   status       ChatThreadStatus  @default(PENDING)
+  adminLastReadAt DateTime?
+  readReceipts ChatReadReceipt[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @default(now()) @updatedAt
 
@@ -139,12 +187,84 @@ model PaymentBill {
   cycle        PaymentCycle
   billingLabel String
   roomNumber   String?
-  amount       Float
-  status       PaymentStatus  @default(PENDING)
-  dueDate      DateTime
-  paidAt       DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @default(now()) @updatedAt
+  amount             Decimal        @db.Decimal(10, 2)
+  status             PaymentStatus  @default(PENDING)
+  dueDate            DateTime
+  paidAt             DateTime?
+  paymentReference   String?
+  paymentNote        String?
+  proofOriginalName  String?
+  proofStorageName   String?
+  proofMimeType      String?
+  proofSize          Int?
+  submittedAt        DateTime?
+  verifiedAt         DateTime?
+  verifiedById       Int?
+  rejectionReason    String?
+  verifiedBy         User?          @relation("PaymentBillVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  student            User           @relation("PaymentBillStudent", fields: [studentId], references: [studentId], onDelete: Restrict, onUpdate: Cascade)
+  room               Room?          @relation(fields: [roomNumber], references: [roomNumber], onDelete: Restrict, onUpdate: Cascade)
+  submissions        PaymentSubmission[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @default(now()) @updatedAt
 
   @@index([studentId, status, dueDate])
+  @@index([status, submittedAt])
+  @@index([verifiedById, verifiedAt])
+  @@index([roomNumber])
+}
+
+
+model PaymentSubmission {
+  id                Int                     @id @default(autoincrement())
+  billId            Int
+  paymentReference  String
+  paymentNote       String?
+  proofOriginalName String
+  proofStorageName  String
+  proofMimeType     String
+  proofSize         Int
+  status            PaymentSubmissionStatus @default(SUBMITTED)
+  submittedAt       DateTime                @default(now())
+  reviewedAt        DateTime?
+  reviewerId        Int?
+  rejectionReason   String?
+  bill              PaymentBill             @relation(fields: [billId], references: [id], onDelete: Cascade)
+  reviewer          User?                   @relation("PaymentSubmissionReviewedBy", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([billId, submittedAt])
+  @@index([status, submittedAt])
+  @@index([reviewerId, reviewedAt])
+}
+
+model ChatReadReceipt {
+  id         Int      @id @default(autoincrement())
+  chatKey    String
+  userRole   Role
+  userId     String
+  lastReadAt DateTime @default(now())
+  lastReadMessageId Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+  thread     ChatThread @relation(fields: [chatKey], references: [chatKey], onDelete: Cascade)
+
+  @@unique([chatKey, userRole, userId])
+  @@index([userRole, userId, lastReadAt])
+}
+
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  title     String           @db.VarChar(140)
+  message   String           @db.VarChar(500)
+  link      String?          @db.VarChar(240)
+  entityId  Int?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([type, createdAt])
 }
