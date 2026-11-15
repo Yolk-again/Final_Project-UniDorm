@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: unidorm-api
+    runtime: node
+    plan: starter
+    region: singapore
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: npm run start:prod
+    healthCheckPath: /health/ready
+    disk:
+      name: unidorm-payment-proofs
+      mountPath: /opt/render/project/src/uploads/payment-proofs
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: unidorm-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_REGISTRATION_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: PAYMENT_PROOF_DIR
+        value: /opt/render/project/src/uploads/payment-proofs
+
+databases:
+  - name: unidorm-db
+    databaseName: unidorm
+    user: unidorm
+    region: singapore
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    postgresMajorVersion: "18"
