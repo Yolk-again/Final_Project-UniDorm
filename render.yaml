@@ -23,6 +23,8 @@ services:
         sync: false
       - key: PAYMENT_PROOF_DIR
         value: /tmp/unidorm-payment-proofs
+      - key: PAYMENT_PROOF_STORAGE_DURABLE
+        value: "false"
 
 databases:
   - name: unidorm-demo-db

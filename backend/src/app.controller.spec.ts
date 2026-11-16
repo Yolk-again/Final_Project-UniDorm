@@ -24,9 +24,11 @@ describe('AppController', () => {
     });
   });
 
-  it("reports database readiness only after a successful database query", async () => {
+  it("reports database readiness and payment evidence capability", async () => {
     const result = await appController.getReadiness();
     expect(result.status).toBe("ready");
     expect(result.database).toBe("connected");
+    expect(typeof result.paymentSubmissionEnabled).toBe("boolean");
+    expect(["durable", "not-configured"]).toContain(result.paymentProofStorage);
   });
 });

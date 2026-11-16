@@ -2,6 +2,7 @@ import { Controller, Get } from "@nestjs/common";
 import { AppService } from "./app.service";
 import { Public } from "./auth/auth.guard";
 import { PrismaService } from "./prisma/prisma.service";
+import { isPaymentProofStorageDurable } from "./payment/payment-storage";
 
 @Public()
 @Controller()
@@ -28,10 +29,14 @@ export class AppController {
   @Get("health/ready")
   async getReadiness() {
     await this.prisma.$queryRaw`SELECT 1`;
+    const paymentProofStorageEnabled = isPaymentProofStorageDurable();
+
     return {
       status: "ready",
       service: "unidorm-api",
       database: "connected",
+      paymentProofStorage: paymentProofStorageEnabled ? "durable" : "not-configured",
+      paymentSubmissionEnabled: paymentProofStorageEnabled,
       timestamp: new Date().toISOString(),
     };
   }
