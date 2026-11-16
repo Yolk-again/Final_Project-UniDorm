@@ -63,9 +63,33 @@ jobs:
       - run: npm run build
       - run: npm run lint
 
+  ops-scripts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell operations scripts
+        shell: pwsh
+        run: |
+          $scripts = @(
+            "scripts/backup-render-postgres.ps1",
+            "scripts/restore-postgres-backup.ps1"
+          )
+          foreach ($script in $scripts) {
+            $path = Join-Path $env:GITHUB_WORKSPACE $script
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "Missing operations script: $script"
+            }
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              throw ($errors | Out-String)
+            }
+          }
+
   package:
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, frontend, ops-scripts]
     steps:
       - uses: actions/checkout@v4
       - name: Upload complete source project
