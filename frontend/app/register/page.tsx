@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
 
-const STUDENT_PREFIX = "68306130";
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 
 type ToastType = "success" | "error";
@@ -56,7 +55,7 @@ export default function RegisterPage() {
     }, 2500);
   };
 
-  const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 10);
+  const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 16);
 
   const passwordChecks = [
     { label: "At least 8 characters", met: formData.password.length >= 8 },
@@ -95,10 +94,8 @@ export default function RegisterPage() {
 
       if (!formData.studentId) {
         newErrors.studentId = "Please enter the student ID";
-      } else if (
-        !new RegExp(`^${STUDENT_PREFIX}\\d{2}$`).test(formData.studentId)
-      ) {
-        newErrors.studentId = `Student ID must start with ${STUDENT_PREFIX} and end with exactly 2 digits`;
+      } else if (!/^[0-9]{1,16}$/.test(formData.studentId)) {
+        newErrors.studentId = "Student ID must contain 1 to 16 digits";
       }
     }
 
@@ -378,8 +375,8 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  maxLength={10}
-                  placeholder="68306130XX"
+                  maxLength={16}
+                  placeholder="Enter your student ID number"
                   className={`${inputClass} ${
                     errors.studentId ? "border-red-400" : "border-slate-200"
                   }`}

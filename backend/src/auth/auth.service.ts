@@ -9,13 +9,12 @@ import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import * as bcrypt from "bcrypt";
 
-const STUDENT_PREFIX = "68306130";
 const ADMIN_ID_REGEX = /^(0[1-9]|10)$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 const GMAIL_REGEX = /^[^\s@]+@gmail\.com$/i;
 
 function isValidStudentId(id: string) {
-  return new RegExp(`^${STUDENT_PREFIX}\\d{2}$`).test(id);
+  return /^[0-9]{1,16}$/.test(id);
 }
 
 function isValidAdminId(id: string) {
@@ -76,7 +75,7 @@ export class AuthService {
 
       if (!isValidStudentId(studentId)) {
         throw new BadRequestException(
-          `Student ID must start with ${STUDENT_PREFIX} and end with exactly 2 digits`,
+          "Student ID must contain 1 to 16 digits",
         );
       }
 
@@ -179,7 +178,7 @@ export class AuthService {
 
       if (!isValidStudentId(studentId)) {
         throw new BadRequestException(
-          `Student ID must start with ${STUDENT_PREFIX} and end with exactly 2 digits`,
+          "Student ID must contain 1 to 16 digits",
         );
       }
 
