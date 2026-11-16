@@ -26,7 +26,7 @@ describe("AuthRateLimitMiddleware", () => {
     const middleware = new AuthRateLimitMiddleware();
     const next = jest.fn();
 
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
       middleware.use(
         { method: "POST", path: "/auth/login", ip: "192.0.2.5", socket: {} } as any,
         createResponse(),
@@ -41,7 +41,7 @@ describe("AuthRateLimitMiddleware", () => {
       next,
     );
 
-    expect(next).toHaveBeenCalledTimes(10);
+    expect(next).toHaveBeenCalledTimes(120);
     expect(blockedResponse.statusCode).toBe(429);
     expect(blockedResponse.body.statusCode).toBe(429);
     expect(blockedResponse.headers["Retry-After"]).toBeDefined();

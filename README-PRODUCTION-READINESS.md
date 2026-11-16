@@ -37,8 +37,8 @@ When `PAYMENT_PROOF_STORAGE_DURABLE` is not explicitly true in production, the A
 
 ## Authentication abuse controls
 
-- Login: maximum 10 requests per client IP per 15 minutes.
-- Registration: maximum 5 requests per client IP per hour.
+- Login: maximum 120 requests per client IP per 15 minutes.
+- Registration: maximum 60 requests per client IP per hour.
 - The current implementation stores counters in process memory. It is a free-demo safeguard for the current single instance, not distributed rate limiting. Counters reset on restart; deploy a distributed ingress/WAF limit before multi-instance or production operation.
 - Protected requests re-read the account's current role and student/admin identifier from PostgreSQL. Deleted accounts and stale role/identity tokens are rejected. Gender is refreshed from the database for each request.
 

@@ -21,7 +21,7 @@ The database expiry is account-specific deployment metadata, not a permanent gua
 - Payment receipt uploads are disabled in production unless `PAYMENT_PROOF_STORAGE_DURABLE=true` is configured.
 - The readiness endpoint reports whether payment submissions are enabled and whether durable private storage is configured.
 - Production startup rejects a claimed durable proof directory located under `/tmp` or `/var/tmp`.
-- Login and registration have process-local IP request limits.
+- Login and registration have process-local IP request limits (120 login requests per 15 minutes and 60 registrations per hour per client IP).
 - Each protected API request checks that the account still exists and that the role and student/admin identity in the token still match the database.
 
 ## Before using real student information

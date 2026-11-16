@@ -12,8 +12,8 @@ type RateLimitRule = {
 };
 
 const AUTH_RULES: Record<string, RateLimitRule> = {
-  "/auth/login": { limit: 10, windowMs: 15 * 60 * 1000 },
-  "/auth/register": { limit: 5, windowMs: 60 * 60 * 1000 },
+  "/auth/login": { limit: 120, windowMs: 15 * 60 * 1000 },
+  "/auth/register": { limit: 60, windowMs: 60 * 60 * 1000 },
 };
 
 const MAX_BUCKETS = 10000;
