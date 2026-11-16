@@ -12,3 +12,8 @@ coverage/
 .DS_Store
 Thumbs.db
 backend/uploads/payment-proofs/
+*.dump
+*.dump.json
+*.backup
+*.backup.json
+/UniDormBackups/
