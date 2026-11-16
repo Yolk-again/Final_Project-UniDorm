@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsOptional, IsString, Length, MaxLength } from "class-validator";
+import { IsEmail, IsIn, IsOptional, IsString, Length, Matches, MaxLength } from "class-validator";
 
 export class RegisterDto {
   @IsIn(["student", "admin"])
@@ -18,8 +18,9 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  @Length(8, 8)
-  studentIdPrefix?: string;
+  @Length(10, 10)
+  @Matches(/^[0-9]{10}$/)
+  studentId?: string;
 
   @IsOptional()
   @IsIn(["Male", "Female"])
