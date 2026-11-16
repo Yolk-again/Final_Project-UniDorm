@@ -444,7 +444,7 @@ export default function RegisterPage() {
                     No obvious format issue detected. This does not verify that the ID exists in PSU records; check it against your official student account.
                   </p>
                 ) : null}
-                {errors.studentId && (
+                {errors.studentId && errors.studentId !== studentIdIssue && (
                   <p className="mt-1 text-xs font-medium text-red-500" role="alert">
                     {errors.studentId}
                   </p>
