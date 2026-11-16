@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "revival/**", "deployment/**", "production-readiness/**"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "deployment/**"]
 
 jobs:
   backend:
