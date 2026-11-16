@@ -165,3 +165,7 @@ If `migrate deploy` previously failed on `20261115060000_enforce_core_data_integ
 ## Round 12 — Student bill notification indicator
 
 The student Payments tab shows a persistent red unread dot when a new bill is assigned to that student. Opening Payments marks that student's bill-created notifications as read through authenticated, user-scoped endpoints. See `ROUND-12-STUDENT-BILL-RED-DOT-UPDATE.md` and `ROUND-12-POWERSHELL-TESTING.md`. No migration is required.
+
+## Database backup and restore
+
+The current free Render PostgreSQL database has a reported expiration date. Before attempting a database cutover, follow `DATABASE-BACKUP-AND-RESTORE.md` and use the guarded PowerShell scripts in `scripts/` to create and verify a backup and restore it to a separate empty database. No live database has been exported or changed by adding these scripts. Never run `prisma migrate reset` against the live database.
