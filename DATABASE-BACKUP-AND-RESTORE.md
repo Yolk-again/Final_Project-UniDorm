@@ -47,7 +47,7 @@ $ErrorActionPreference = "Stop"
 $secureUrl = Read-Host "Paste the Render external database URL" -AsSecureString
 $env:UNIDORM_DATABASE_URL = (New-Object System.Net.NetworkCredential("", $secureUrl)).Password
 
-.scripts\backup-render-postgres.ps1
+.\scripts\backup-render-postgres.ps1
 
 Get-ChildItem "$HOME\UniDormBackups\unidorm-*.dump" |
     Sort-Object LastWriteTime -Descending |
@@ -90,7 +90,7 @@ $backup = Get-ChildItem "$HOME\UniDormBackups\unidorm-*.dump" |
 
 if ($null -eq $backup) { throw "No UniDorm backup archive was found." }
 
-.scripts\restore-postgres-backup.ps1 -BackupFile $backup.FullName
+.\scripts\restore-postgres-backup.ps1 -BackupFile $backup.FullName
 ```
 
 The restore script will stop if the source and destination resolve to the same database, if the archive hash is wrong, or if the destination is not empty. It uses a single transaction and does not drop existing databases or tables.
