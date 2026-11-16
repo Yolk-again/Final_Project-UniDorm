@@ -13,7 +13,7 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"student" | "admin">("student");
   const [loading, setLoading] = useState(false);
   const [generatedAdminId, setGeneratedAdminId] = useState("");
-  const [generatedStudentId, setGeneratedStudentId] = useState("");
+  const [registeredStudentId, setGeneratedStudentId] = useState("");
   const [registrationKey, setRegistrationKey] = useState("");
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registeredRole, setRegisteredRole] = useState<"student" | "admin" | "">("",
@@ -56,7 +56,7 @@ export default function RegisterPage() {
     }, 2500);
   };
 
-  const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 8);
+  const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 10);
 
   const passwordChecks = [
     { label: "At least 8 characters", met: formData.password.length >= 8 },
@@ -94,9 +94,9 @@ export default function RegisterPage() {
       if (!formData.gender) newErrors.gender = "Please select the gender";
 
       if (!formData.studentId) {
-        newErrors.studentId = "Please enter the first 8 digits of your PSU student ID";
-      } else if (!/^[0-9]{8}$/.test(formData.studentId)) {
-        newErrors.studentId = "Enter exactly 8 digits: the admission year and your campus/programme group code";
+        newErrors.studentId = "Please enter your complete 10-digit PSU student ID";
+      } else if (!/^[0-9]{10}$/.test(formData.studentId)) {
+        newErrors.studentId = "Enter all 10 digits exactly as issued by your university";
       }
     }
 
@@ -122,7 +122,7 @@ export default function RegisterPage() {
               gender: formData.gender,
               name: formData.name,
               email: formData.email,
-              studentIdPrefix: formData.studentId,
+              studentId: formData.studentId,
               password: formData.password,
             }
           : {
@@ -377,14 +377,14 @@ export default function RegisterPage() {
             {role === "student" && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700">
-                  First 8 digits of your PSU student ID
+                  Your 10-digit PSU student ID
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
-                  maxLength={8}
+                  maxLength={10}
                   autoComplete="off"
-                  placeholder="Admission year + 6-digit group code"
+                  placeholder="Enter all 10 digits"
                   className={`${inputClass} ${
                     errors.studentId ? "border-red-400" : "border-slate-200"
                   }`}
@@ -397,7 +397,7 @@ export default function RegisterPage() {
                   }
                 />
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Enter the first 8 digits supplied by PSU: the first 2 digits are the Thai Buddhist academic-year code, followed by your 6-digit campus/faculty/programme group code. UniDorm assigns the final 2 digits automatically in registration order. The generated 10-digit number is your UniDorm login ID, not a replacement for your official PSU ID.
+                  Enter the complete 10-digit student ID exactly as issued by your university. UniDorm does not generate, assign, or change any part of this number. You will use this same ID to log in.
                 </p>
                 {errors.studentId && (
                   <p className="mt-1 text-xs font-medium text-red-500">
@@ -589,22 +589,22 @@ export default function RegisterPage() {
             {registrationSuccess ? (
               <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-slate-900">
                 <p className="text-lg font-semibold">Registration complete!</p>
-                {role === "student" && generatedStudentId ? (
+                {role === "student" && registeredStudentId ? (
                   <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
                     <div>
-                      <p className="text-sm text-slate-500">Your UniDorm Student ID</p>
+                      <p className="text-sm text-slate-500">Your registered Student ID</p>
                       <p className="mt-1 text-3xl font-bold tracking-wider text-slate-900">
-                        {generatedStudentId}
+                        {registeredStudentId}
                       </p>
                     </div>
                     <p className="text-sm text-slate-500">
-                      Save this 10-digit ID. Use it with your password whenever you log in.
+                      This is the university-issued ID you entered. Use this exact 10-digit ID with your password whenever you log in.
                     </p>
                     <button
                       type="button"
                       onClick={() => {
                         void navigator.clipboard
-                          .writeText(generatedStudentId)
+                          .writeText(registeredStudentId)
                           .then(() => showToast("Student ID copied!", "success"))
                           .catch(() => showToast("Unable to copy. Please write down your ID.", "error"));
                       }}
