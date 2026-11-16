@@ -1,4 +1,4 @@
-﻿import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as bcrypt from "bcrypt";
@@ -13,12 +13,6 @@ jest.mock("bcrypt", () => ({
 
 describe("AuthService", () => {
   let service: AuthService;
-  const transaction = {
-    $queryRaw: jest.fn(),
-    user: {
-      create: jest.fn(),
-    },
-  };
   const prisma = {
     user: {
       findFirst: jest.fn(),
@@ -26,7 +20,6 @@ describe("AuthService", () => {
       findMany: jest.fn(),
       create: jest.fn(),
     },
-    $transaction: jest.fn(),
   };
   const jwt = {
     signAsync: jest.fn().mockResolvedValue("signed-token"),
@@ -34,11 +27,9 @@ describe("AuthService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    transaction.$queryRaw.mockResolvedValue([{ sequence: 1 }]);
-    transaction.user.create.mockResolvedValue({});
-    prisma.$transaction.mockImplementation(
-      async (callback: (tx: typeof transaction) => Promise<unknown>) => callback(transaction),
-    );
+    prisma.user.create.mockResolvedValue({});
+    prisma.user.findUnique.mockResolvedValue(null);
+    (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-password");
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -55,52 +46,66 @@ describe("AuthService", () => {
     expect(service).toBeDefined();
   });
 
-  it.each(["69001234", "68054321", "67234567"])(
-    "generates a 10-digit UniDorm ID from an 8-digit PSU prefix: %s",
-    async (studentIdPrefix) => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      transaction.$queryRaw.mockResolvedValue([{ sequence: 1 }]);
-      (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-password");
-      const result = await service.register({ role: "student", name: "Student User", email: "student@gmail.com", studentIdPrefix, gender: "Male", password: "ValidPass!1" });
-      expect(result).toEqual({ message: "Student registered successfully", studentId: `${studentIdPrefix}01`, nextPath: "/login?role=student" });
-      expect(transaction.user.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ role: "student", studentId: `${studentIdPrefix}01` }) }));
+  it.each(["6900123401", "6805432102", "6723456789"])(
+    "stores the exact 10-digit university-issued student ID: %s",
+    async (studentId) => {
+      const result = await service.register({
+        role: "student",
+        name: "Student User",
+        email: "student@gmail.com",
+        studentId,
+        gender: "Male",
+        password: "ValidPass!1",
+      });
+
+      expect(result).toEqual({
+        message: "Student registered successfully",
+        studentId,
+        nextPath: "/login?role=student",
+      });
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          role: "student",
+          studentId,
+          name: "Student User",
+        }),
+      });
     },
   );
 
-  it("increments the final two digits in registration order for the same prefix", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    transaction.$queryRaw.mockResolvedValueOnce([{ sequence: 1 }]).mockResolvedValueOnce([{ sequence: 2 }]);
-    (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-password");
-    const first = await service.register({ role: "student", name: "First Student", email: "first@gmail.com", studentIdPrefix: "69001234", gender: "Male", password: "ValidPass!1" });
-    const second = await service.register({ role: "student", name: "Second Student", email: "second@gmail.com", studentIdPrefix: "69001234", gender: "Female", password: "ValidPass!1" });
-    expect(first.studentId).toBe("6900123401");
-    expect(second.studentId).toBe("6900123402");
+  it.each(["1234567", "123456789", "12345678901", "ABCDEFGHIJ"])(
+    "rejects a student ID that is not exactly 10 digits: %s",
+    async (studentId) => {
+      await expect(
+        service.register({
+          role: "student",
+          name: "Student User",
+          email: "student@gmail.com",
+          studentId,
+          gender: "Male",
+          password: "ValidPass!1",
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a university-issued ID that is already registered", async () => {
+    prisma.user.create.mockRejectedValue({ code: "P2002" });
+
+    await expect(
+      service.register({
+        role: "student",
+        name: "Duplicate Student",
+        email: "duplicate@gmail.com",
+        studentId: "6900123401",
+        gender: "Female",
+        password: "ValidPass!1",
+      }),
+    ).rejects.toThrow(ConflictException);
   });
 
-  it("allocates independent sequences for different programme prefixes", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    transaction.$queryRaw.mockResolvedValueOnce([{ sequence: 1 }]).mockResolvedValueOnce([{ sequence: 1 }]);
-    (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-password");
-    const first = await service.register({ role: "student", name: "First Programme Student", email: "first-programme@gmail.com", studentIdPrefix: "69001234", gender: "Male", password: "ValidPass!1" });
-    const second = await service.register({ role: "student", name: "Second Programme Student", email: "second-programme@gmail.com", studentIdPrefix: "69005678", gender: "Female", password: "ValidPass!1" });
-    expect(first.studentId).toBe("6900123401");
-    expect(second.studentId).toBe("6900567801");
-  });
-
-  it.each(["1234567", "123456789", "ABCDEFGH"])("rejects a prefix that is not exactly 8 digits: %s", async (studentIdPrefix) => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-password");
-    await expect(service.register({ role: "student", name: "Student User", email: "student@gmail.com", studentIdPrefix, gender: "Male", password: "ValidPass!1" })).rejects.toThrow(BadRequestException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(transaction.user.create).not.toHaveBeenCalled();
-  });
-
-  it("stops when all 99 registration sequence numbers are used", async () => {
-    prisma.user.findUnique.mockResolvedValue(null);
-    transaction.$queryRaw.mockResolvedValue([]);
-    (bcrypt.hash as jest.Mock).mockResolvedValue("hashed-password");
-    await expect(service.register({ role: "student", name: "Full Group", email: "full@gmail.com", studentIdPrefix: "69001234", gender: "Male", password: "ValidPass!1" })).rejects.toThrow(ConflictException);
-  });
   it("does not allow admin registration without the configured registration key", async () => {
     await expect(
       service.register({
