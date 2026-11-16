@@ -104,7 +104,7 @@ if ($LASTEXITCODE -ne 0 -or $tableCountOutput -notmatch '^\d+$' -or [Int64]$tabl
     throw "The restore completed but the post-restore table check failed. Review the destination before using it."
 }
 
-$migrationCheckQuery = "SELECT CASE WHEN to_regclass('public.""_prisma_migrations""') IS NULL THEN 0 ELSE 1 END;"
+$migrationCheckQuery = 'SELECT CASE WHEN to_regclass(''public._prisma_migrations'') IS NULL THEN 0 ELSE 1 END;'
 $migrationCheckOutput = (& $psql.Source -X -qAt -v ON_ERROR_STOP=1 "--dbname=$targetUrl" -c $migrationCheckQuery 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $migrationCheckOutput -ne "1") {
     throw "The restored database does not contain the expected Prisma migration history table. Do not switch the application to this database."
