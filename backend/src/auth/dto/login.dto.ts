@@ -10,7 +10,7 @@ export class LoginDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(16)
+  @Length(10, 10)
   studentId?: string;
 
   @IsOptional()

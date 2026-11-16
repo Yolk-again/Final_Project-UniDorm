@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"student" | "admin">("student");
   const [loading, setLoading] = useState(false);
   const [generatedAdminId, setGeneratedAdminId] = useState("");
+  const [generatedStudentId, setGeneratedStudentId] = useState("");
   const [registrationKey, setRegistrationKey] = useState("");
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registeredRole, setRegisteredRole] = useState<"student" | "admin" | "">("",
@@ -55,7 +56,7 @@ export default function RegisterPage() {
     }, 2500);
   };
 
-  const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 16);
+  const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 8);
 
   const passwordChecks = [
     { label: "At least 8 characters", met: formData.password.length >= 8 },
@@ -93,9 +94,9 @@ export default function RegisterPage() {
       if (!formData.gender) newErrors.gender = "Please select the gender";
 
       if (!formData.studentId) {
-        newErrors.studentId = "Please enter the student ID";
-      } else if (!/^[0-9]{1,16}$/.test(formData.studentId)) {
-        newErrors.studentId = "Student ID must contain 1 to 16 digits";
+        newErrors.studentId = "Please enter the first 8 digits of your PSU student ID";
+      } else if (!/^[0-9]{8}$/.test(formData.studentId)) {
+        newErrors.studentId = "Enter exactly 8 digits: the admission year and your campus/programme group code";
       }
     }
 
@@ -106,6 +107,7 @@ export default function RegisterPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneratedAdminId("");
+    setGeneratedStudentId("");
     setErrors((prev) => ({ ...prev, form: "" }));
 
     if (!validateForm()) return;
@@ -120,7 +122,7 @@ export default function RegisterPage() {
               gender: formData.gender,
               name: formData.name,
               email: formData.email,
-              studentId: formData.studentId,
+              studentIdPrefix: formData.studentId,
               password: formData.password,
             }
           : {
@@ -148,6 +150,10 @@ export default function RegisterPage() {
           form: message || "Registration failed",
         }));
         return;
+      }
+
+      if (role === "student" && data?.studentId) {
+        setGeneratedStudentId(String(data.studentId));
       }
 
       if (role === "admin" && data?.adminId) {
@@ -228,6 +234,7 @@ export default function RegisterPage() {
               onClick={() => {
                 setRole("student");
                 setGeneratedAdminId("");
+                setGeneratedStudentId("");
                 setRegistrationKey("");
                 setErrors({});
                 setToast(null);
@@ -370,13 +377,14 @@ export default function RegisterPage() {
             {role === "student" && (
               <div>
                 <label className="block text-sm font-semibold text-slate-700">
-                  Student ID Number
+                  First 8 digits of your PSU student ID
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
-                  maxLength={16}
-                  placeholder="Enter your student ID number"
+                  maxLength={8}
+                  autoComplete="off"
+                  placeholder="Admission year + 6-digit group code"
                   className={`${inputClass} ${
                     errors.studentId ? "border-red-400" : "border-slate-200"
                   }`}
@@ -388,6 +396,9 @@ export default function RegisterPage() {
                     })
                   }
                 />
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Enter the first 8 digits supplied by PSU: the first 2 digits are the Thai Buddhist academic-year code, followed by your 6-digit campus/faculty/programme group code. UniDorm assigns the final 2 digits automatically in registration order. The generated 10-digit number is your UniDorm login ID, not a replacement for your official PSU ID.
+                </p>
                 {errors.studentId && (
                   <p className="mt-1 text-xs font-medium text-red-500">
                     {errors.studentId}
@@ -578,6 +589,32 @@ export default function RegisterPage() {
             {registrationSuccess ? (
               <div className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-slate-900">
                 <p className="text-lg font-semibold">Registration complete!</p>
+                {role === "student" && generatedStudentId ? (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div>
+                      <p className="text-sm text-slate-500">Your UniDorm Student ID</p>
+                      <p className="mt-1 text-3xl font-bold tracking-wider text-slate-900">
+                        {generatedStudentId}
+                      </p>
+                    </div>
+                    <p className="text-sm text-slate-500">
+                      Save this 10-digit ID. Use it with your password whenever you log in.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard
+                          .writeText(generatedStudentId)
+                          .then(() => showToast("Student ID copied!", "success"))
+                          .catch(() => showToast("Unable to copy. Please write down your ID.", "error"));
+                      }}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Copy Student ID
+                    </button>
+                  </div>
+                ) : null}
+
                 {role === "admin" && generatedAdminId ? (
                   <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
                     <p className="text-sm text-slate-500">

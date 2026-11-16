@@ -18,8 +18,8 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(16)
-  studentId?: string;
+  @Length(8, 8)
+  studentIdPrefix?: string;
 
   @IsOptional()
   @IsIn(["Male", "Female"])

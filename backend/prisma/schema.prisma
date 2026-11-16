@@ -93,6 +93,13 @@ model User {
   @@index([role, createdAt])
 }
 
+model StudentIdSequence {
+  prefix       String   @id @db.VarChar(8)
+  nextSequence Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+}
+
 model Room {
   id         Int      @id @default(autoincrement())
   roomNumber String   @unique

@@ -247,6 +247,8 @@ export default function LoginPage() {
               </label>
               <input
                 type="text"
+                inputMode="numeric"
+                maxLength={role === "student" ? 10 : 8}
                 required
                 placeholder={
                   role === "student" ? "Student ID Number" : "Admin ID Number"

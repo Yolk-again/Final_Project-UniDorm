@@ -13,8 +13,12 @@ const ADMIN_ID_REGEX = /^(0[1-9]|10)$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 const GMAIL_REGEX = /^[^\s@]+@gmail\.com$/i;
 
+function isValidStudentIdPrefix(prefix: string) {
+  return /^[0-9]{8}$/.test(prefix);
+}
+
 function isValidStudentId(id: string) {
-  return /^[0-9]{1,16}$/.test(id);
+  return /^[0-9]{10}$/.test(id);
 }
 
 function isValidAdminId(id: string) {
@@ -71,49 +75,61 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(data.password, 12);
 
     if (data.role === "student") {
-      const studentId = String(data.studentId ?? "").trim();
+      const studentIdPrefix = String(data.studentIdPrefix ?? "").trim();
 
-      if (!isValidStudentId(studentId)) {
-        throw new BadRequestException(
-          "Student ID must contain 1 to 16 digits",
-        );
+      if (!isValidStudentIdPrefix(studentIdPrefix)) {
+        throw new BadRequestException("Enter exactly 8 digits from the beginning of your PSU student ID");
       }
 
       if (!data.gender || !["Male", "Female"].includes(data.gender)) {
         throw new BadRequestException("Gender is required");
       }
 
-      const existingStudent = await this.prisma.user.findUnique({
-        where: { studentId },
-      });
-
-      if (existingStudent) {
-        throw new BadRequestException("This student ID is already registered");
-      }
-
       try {
-        await this.prisma.user.create({
-          data: {
-            role: "student",
-            name: data.name.trim(),
-            email,
-            studentId,
-            adminId: null,
-            gender: data.gender,
-            password: hashedPassword,
-          },
+        const studentId = await this.prisma.$transaction(async (tx) => {
+          const sequences = await tx.$queryRaw<Array<{ sequence: number }>>`
+            INSERT INTO "StudentIdSequence" ("prefix", "nextSequence", "createdAt", "updatedAt")
+            VALUES (${studentIdPrefix}, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT ("prefix")
+            DO UPDATE SET
+              "nextSequence" = "StudentIdSequence"."nextSequence" + 1,
+              "updatedAt" = CURRENT_TIMESTAMP
+            WHERE "StudentIdSequence"."nextSequence" < 100
+            RETURNING ("nextSequence" - 1) AS sequence
+          `;
+
+          if (sequences.length === 0 || sequences[0].sequence > 99) {
+            throw new ConflictException("This 8-digit student group has reached its 99 UniDorm registrations");
+          }
+
+          const generatedStudentId = `${studentIdPrefix}${String(sequences[0].sequence).padStart(2, "0")}`;
+
+          await tx.user.create({
+            data: {
+              role: "student",
+              name: data.name.trim(),
+              email,
+              studentId: generatedStudentId,
+              adminId: null,
+              gender: data.gender,
+              password: hashedPassword,
+            },
+          });
+
+          return generatedStudentId;
         });
+
+        return {
+          message: "Student registered successfully",
+          studentId,
+          nextPath: "/login?role=student",
+        };
       } catch (error) {
         if ((error as { code?: string })?.code === "P2002") {
           throw new ConflictException("This email address or student ID is already registered");
         }
         throw error;
       }
-
-      return {
-        message: "Student registered successfully",
-        nextPath: "/login?role=student",
-      };
     }
 
     const existingAdmins = await this.prisma.user.findMany({
@@ -177,9 +193,7 @@ export class AuthService {
       const studentId = String(data.studentId ?? "").trim();
 
       if (!isValidStudentId(studentId)) {
-        throw new BadRequestException(
-          "Student ID must contain 1 to 16 digits",
-        );
+        throw new BadRequestException("Student ID must contain exactly 10 digits");
       }
 
       user = await this.prisma.user.findFirst({

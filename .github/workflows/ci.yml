@@ -2,7 +2,7 @@ name: UniDorm CI
 
 on:
   push:
-    branches: ["main", "revival/**"]
+    branches: ["main", "revival/**", "deployment/**"]
   pull_request:
     branches: ["main"]
 
@@ -71,22 +71,19 @@ jobs:
       - name: Upload complete source project
         uses: actions/upload-artifact@v4
         with:
-          name: UniDorm-revival-project
+          name: UniDorm-full-project
           path: |
-            backend/
-            frontend/
-            db/
-            README.md
-            .gitignore
-            .github/
-            !backend/node_modules/**
-            !frontend/node_modules/**
-            !frontend/.next/**
-            !backend/dist/**
-            !frontend/dist/**
-            !backend/coverage/**
-            !frontend/coverage/**
-            !backend/.env
-            !frontend/.env.local
+            .
+            !.git/**
+            !**/node_modules/**
+            !**/.next/**
+            !**/dist/**
+            !**/coverage/**
+            !**/.vercel/**
+            !**/uploads/payment-proofs/**
+            !**/.env
+            !**/.env.*
+            **/.env.example
+            !**/*.log
           if-no-files-found: error
           retention-days: 14
