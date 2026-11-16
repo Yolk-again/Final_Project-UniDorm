@@ -31,6 +31,12 @@ psql --version
 
 Use PostgreSQL 18 client tools for the current PostgreSQL 18 source. Do not paste connection URLs, passwords, or database credentials into chat, GitHub issues, source files, or terminal transcripts.
 
+## Backup scope warning
+
+This process backs up the UniDorm PostgreSQL database only. A `pg_dump` archive does not include PostgreSQL cluster-wide login roles or passwords; create the target database user and grant the required application privileges separately when preparing the replacement database. The restore script skips original ownership and grant statements so the destination account can own the restored objects.
+
+The database archive also does not include uploaded receipt files or any other files stored on the API service. The current Render configuration places receipt files under `/tmp/unidorm-payment-proofs`, which is ephemeral instance storage. Treat any existing receipt files as a separate recovery item; do not assume they are present in the PostgreSQL dump or will survive a service restart/redeploy. Before using this as a real system, move receipt evidence to verified private durable storage and back it up together with PostgreSQL.
+
 ## Step 1 — Temporarily allow your own IP
 
 In the Render dashboard, open the `unidorm-demo-db` database and its networking/IP allowlist settings. Add only the public IP address of the computer performing the export, using a single-address CIDR (usually `/32`). Do not open the database to `0.0.0.0/0`.
