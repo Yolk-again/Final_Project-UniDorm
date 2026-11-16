@@ -46,7 +46,7 @@ describe("AuthService", () => {
     expect(service).toBeDefined();
   });
 
-  it.each(["6900123401", "6805432102", "6723456789"])(
+  it.each(["6900123401", "6805432102", "6723456789", "6830613018"])(
     "stores the exact 10-digit university-issued student ID: %s",
     async (studentId) => {
       const result = await service.register({
@@ -90,6 +90,49 @@ describe("AuthService", () => {
       expect(prisma.user.create).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    "0000000000",
+    "1111111111",
+    "2222222222",
+    "9999999999",
+    "0123456789",
+    "1234567890",
+    "0987654321",
+    "9876543210",
+  ])("rejects an obvious placeholder or sequential student ID: %s", async (studentId) => {
+    await expect(
+      service.register({
+        role: "student",
+        name: "Student User",
+        email: "student@gmail.com",
+        studentId,
+        gender: "Male",
+        password: "ValidPass!1",
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a student ID with an admission-year code in the near future", async () => {
+    const currentThaiYearCode = (new Date().getFullYear() + 543) % 100;
+    const futureYearCode = String((currentThaiYearCode + 2) % 100).padStart(2, "0");
+    const studentId = `${futureYearCode}12345678`;
+
+    await expect(
+      service.register({
+        role: "student",
+        name: "Future Cohort",
+        email: "future@gmail.com",
+        studentId,
+        gender: "Male",
+        password: "ValidPass!1",
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
 
   it("rejects a university-issued ID that is already registered", async () => {
     prisma.user.create.mockRejectedValue({ code: "P2002" });

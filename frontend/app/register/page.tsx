@@ -5,8 +5,36 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
+const SEQUENTIAL_STUDENT_IDS = new Set([
+  "0123456789",
+  "1234567890",
+  "0987654321",
+  "9876543210",
+]);
 
 type ToastType = "success" | "error";
+
+function getStudentIdIssue(studentId: string): string {
+  if (!/^[0-9]{10}$/.test(studentId)) return "";
+
+  if (/^(\d)\1{9}$/.test(studentId)) {
+    return "This looks like a placeholder ID because all ten digits are identical. Check your official PSU student record.";
+  }
+
+  if (SEQUENTIAL_STUDENT_IDS.has(studentId)) {
+    return "This looks like a sequential placeholder ID. Enter the exact number shown in your official PSU student record.";
+  }
+
+  const admissionYearCode = Number(studentId.slice(0, 2));
+  const currentThaiYearCode = (new Date().getFullYear() + 543) % 100;
+  const yearsAhead = (admissionYearCode - currentThaiYearCode + 100) % 100;
+
+  if (yearsAhead >= 2 && yearsAhead <= 15) {
+    return `The first two digits (${studentId.slice(0, 2)}) appear to be a future admission-year code. Check the year on your official PSU student record.`;
+  }
+
+  return "";
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -57,6 +85,8 @@ export default function RegisterPage() {
   };
 
   const normalizeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 10);
+  const studentIdIssue = getStudentIdIssue(formData.studentId);
+  const studentIdIsComplete = /^[0-9]{10}$/.test(formData.studentId);
 
   const passwordChecks = [
     { label: "At least 8 characters", met: formData.password.length >= 8 },
@@ -97,6 +127,8 @@ export default function RegisterPage() {
         newErrors.studentId = "Please enter your complete 10-digit PSU student ID";
       } else if (!/^[0-9]{10}$/.test(formData.studentId)) {
         newErrors.studentId = "Enter all 10 digits exactly as issued by your university";
+      } else if (studentIdIssue) {
+        newErrors.studentId = studentIdIssue;
       }
     }
 
@@ -384,23 +416,36 @@ export default function RegisterPage() {
                   inputMode="numeric"
                   maxLength={10}
                   autoComplete="off"
+                  aria-invalid={Boolean(errors.studentId || studentIdIssue)}
                   placeholder="Enter all 10 digits"
                   className={`${inputClass} ${
-                    errors.studentId ? "border-red-400" : "border-slate-200"
+                    errors.studentId || studentIdIssue
+                      ? "border-red-400"
+                      : "border-slate-200"
                   }`}
                   value={formData.studentId}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFormData({
                       ...formData,
                       studentId: normalizeDigits(e.target.value),
-                    })
-                  }
+                    });
+                    setErrors((prev) => ({ ...prev, studentId: "" }));
+                  }}
                 />
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Enter the complete 10-digit student ID exactly as issued by your university. UniDorm does not generate, assign, or change any part of this number. You will use this same ID to log in.
+                  Enter the complete 10-digit number exactly as issued by PSU. The first two digits generally represent the admission-year code. Students from every PSU campus and programme are accepted; UniDorm does not restrict campus or faculty codes.
                 </p>
-                {errors.studentId && (
-                  <p className="mt-1 text-xs font-medium text-red-500">
+                {studentIdIssue ? (
+                  <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700" role="alert">
+                    {studentIdIssue}
+                  </p>
+                ) : studentIdIsComplete ? (
+                  <p className="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700">
+                    No obvious format issue detected. This does not verify that the ID exists in PSU records; check it against your official student account.
+                  </p>
+                ) : null}
+                {errors.studentId && errors.studentId !== studentIdIssue && (
+                  <p className="mt-1 text-xs font-medium text-red-500" role="alert">
                     {errors.studentId}
                   </p>
                 )}

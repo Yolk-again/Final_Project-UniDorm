@@ -12,9 +12,39 @@ import * as bcrypt from "bcrypt";
 const ADMIN_ID_REGEX = /^(0[1-9]|10)$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
 const GMAIL_REGEX = /^[^\s@]+@gmail\.com$/i;
+const SEQUENTIAL_STUDENT_IDS = new Set([
+  "0123456789",
+  "1234567890",
+  "0987654321",
+  "9876543210",
+]);
 
 function isValidStudentId(id: string) {
   return /^[0-9]{10}$/.test(id);
+}
+
+function getStudentIdRegistrationIssue(id: string): string | null {
+  if (!isValidStudentId(id)) {
+    return "Student ID must contain exactly 10 digits";
+  }
+
+  if (/^(\d)\1{9}$/.test(id)) {
+    return "This student ID looks like a placeholder because all ten digits are identical. Check your official PSU record.";
+  }
+
+  if (SEQUENTIAL_STUDENT_IDS.has(id)) {
+    return "This student ID looks like a sequential placeholder. Enter the exact number shown in your official PSU record.";
+  }
+
+  const admissionYearCode = Number(id.slice(0, 2));
+  const currentThaiYearCode = (new Date().getFullYear() + 543) % 100;
+  const yearsAhead = (admissionYearCode - currentThaiYearCode + 100) % 100;
+
+  if (yearsAhead >= 2 && yearsAhead <= 15) {
+    return `The first two digits (${id.slice(0, 2)}) appear to be a future admission-year code. Check the year on your official PSU student record.`;
+  }
+
+  return null;
 }
 
 function isValidAdminId(id: string) {
@@ -72,9 +102,10 @@ export class AuthService {
 
     if (data.role === "student") {
       const studentId = String(data.studentId ?? "").trim();
+      const studentIdIssue = getStudentIdRegistrationIssue(studentId);
 
-      if (!isValidStudentId(studentId)) {
-        throw new BadRequestException("Student ID must contain exactly 10 digits");
+      if (studentIdIssue) {
+        throw new BadRequestException(studentIdIssue);
       }
 
       if (!data.gender || !["Male", "Female"].includes(data.gender)) {
