@@ -2,7 +2,7 @@ name: UniDorm CI
 
 on:
   push:
-    branches: ["main", "revival/**", "deployment/**"]
+    branches: ["main", "revival/**", "deployment/**", "production-readiness/**"]
   pull_request:
     branches: ["main"]
 

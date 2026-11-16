@@ -22,6 +22,7 @@ import { CreateBillDto } from "./dto/create-bill.dto";
 import { SubmitPaymentDto } from "./dto/submit-payment.dto";
 import { VerifyPaymentDto } from "./dto/verify-payment.dto";
 import { PaymentService } from "./payment.service";
+import { assertPaymentProofStorageDurable } from "./payment-storage";
 
 type RequestWithUser = { user: AuthenticatedUser };
 const diskStorage = (require("multer") as { diskStorage: (options: any) => any }).diskStorage;
@@ -93,6 +94,13 @@ export class PaymentController {
       }),
       limits: { fileSize: 5 * 1024 * 1024, files: 1 },
       fileFilter: (_request, file, callback) => {
+        try {
+          assertPaymentProofStorageDurable();
+        } catch (error) {
+          callback(error as Error, false);
+          return;
+        }
+
         if (!ALLOWED_PROOF_TYPES[file.mimetype]) {
           callback(new BadRequestException("Payment proof must be a JPG, PNG, or PDF file"), false);
           return;
@@ -107,6 +115,8 @@ export class PaymentController {
     @Body() body: SubmitPaymentDto,
     @UploadedFile() file?: UploadedProof,
   ) {
+    assertPaymentProofStorageDurable();
+
     if (file && (!existsSync(file.path) || !validateProofSignature(file))) {
       if (file.path && existsSync(file.path)) unlinkSync(file.path);
       throw new BadRequestException("The uploaded proof does not match its file type");

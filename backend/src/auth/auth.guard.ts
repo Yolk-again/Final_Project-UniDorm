@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
+import { PrismaService } from "../prisma/prisma.service";
 
 export type UserRole = "student" | "admin";
 
@@ -35,6 +36,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -46,9 +48,9 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<RequestWithUser>();
-    const [scheme, token] = String(request.headers.authorization ?? "").split(" ");
+    const [scheme, token, extra] = String(request.headers.authorization ?? "").split(" ");
 
-    if (scheme?.toLowerCase() !== "bearer" || !token) {
+    if (scheme?.toLowerCase() !== "bearer" || !token || extra) {
       throw new UnauthorizedException("Please log in to continue");
     }
 
@@ -60,17 +62,39 @@ export class JwtAuthGuard implements CanActivate {
         throw new Error("Invalid token payload");
       }
 
+      const account = await this.prisma.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          role: true,
+          studentId: true,
+          adminId: true,
+          gender: true,
+        },
+      });
+
+      if (!account || account.role !== payload.role) {
+        throw new Error("Account is no longer valid");
+      }
+
+      if (
+        (account.role === "student" && account.studentId !== (payload.studentId ?? null)) ||
+        (account.role === "admin" && account.adminId !== (payload.adminId ?? null))
+      ) {
+        throw new Error("Account identity has changed");
+      }
+
       request.user = {
-        id,
-        role: payload.role,
-        studentId: payload.studentId ?? null,
-        adminId: payload.adminId ?? null,
-        gender: payload.gender ?? null,
+        id: account.id,
+        role: account.role,
+        studentId: account.studentId,
+        adminId: account.adminId,
+        gender: account.gender,
       };
 
       return true;
     } catch {
-      throw new UnauthorizedException("Your session has expired. Please log in again");
+      throw new UnauthorizedException("Your session is invalid or has expired. Please log in again");
     }
   }
 }

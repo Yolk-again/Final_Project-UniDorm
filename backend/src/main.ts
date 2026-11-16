@@ -2,7 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { AppModule } from "./app.module";
 import { accessSync, constants, mkdirSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, resolve, sep } from "node:path";
 
 function isLocalFrontendOrigin(origin: string) {
   try {
@@ -18,6 +18,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   if (process.env.NODE_ENV === "production") {
+    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
       throw new Error("JWT_SECRET must be configured with at least 32 characters in production");
     }
@@ -42,15 +44,26 @@ async function bootstrap() {
         throw new Error("Every FRONTEND_URL origin must use HTTPS in production");
       }
     }
-    if (!process.env.PAYMENT_PROOF_DIR || !isAbsolute(process.env.PAYMENT_PROOF_DIR)) {
-      throw new Error("PAYMENT_PROOF_DIR must be an absolute persistent directory in production");
+
+    if (process.env.PAYMENT_PROOF_STORAGE_DURABLE === "true") {
+      if (!process.env.PAYMENT_PROOF_DIR || !isAbsolute(process.env.PAYMENT_PROOF_DIR)) {
+        throw new Error("PAYMENT_PROOF_DIR must be an absolute private persistent directory in production");
+      }
+
+      const proofDirectory = resolve(process.env.PAYMENT_PROOF_DIR);
+      const ephemeralRoots = ["/tmp", "/var/tmp"].map((directory) => resolve(directory));
+      if (
+        proofDirectory.split(/[\\/]/).some((segment) => segment.toLowerCase() === "public") ||
+        ephemeralRoots.some((directory) => proofDirectory === directory || proofDirectory.startsWith(directory + sep))
+      ) {
+        throw new Error("PAYMENT_PROOF_DIR must be a durable private directory outside public and temporary folders");
+      }
+
+      mkdirSync(proofDirectory, { recursive: true, mode: 0o700 });
+      accessSync(proofDirectory, constants.R_OK | constants.W_OK);
+    } else {
+      console.warn("Payment proof uploads are disabled: durable private storage has not been configured.");
     }
-    const proofDirectory = resolve(process.env.PAYMENT_PROOF_DIR);
-    if (proofDirectory.split(/[\\/]/).some((segment) => segment.toLowerCase() === "public")) {
-      throw new Error("PAYMENT_PROOF_DIR must be outside any public web directory");
-    }
-    mkdirSync(proofDirectory, { recursive: true, mode: 0o700 });
-    accessSync(proofDirectory, constants.R_OK | constants.W_OK);
   }
 
   app.useGlobalPipes(
