@@ -313,7 +313,7 @@ export default function StudentPage() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!authChecked || !studentId) return;
 
@@ -323,6 +323,7 @@ export default function StudentPage() {
     fetchBills(studentId);
     fetchChatThreads();
   }, [authChecked, studentId]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
