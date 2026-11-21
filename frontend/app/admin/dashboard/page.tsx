@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "../lib/api";
 
 function hasUnreadThread(
   thread: any,
@@ -158,11 +159,11 @@ export default function AdminDashboard() {
     try {
       await ensureGroupChats();
 
-      const roomsRes = await fetch("http://localhost:3001/rooms");
-      const bookingsRes = await fetch("http://localhost:3001/bookings");
-      const announcementsRes = await fetch("http://localhost:3001/announcements");
-      const chatRes = await fetch("http://localhost:3001/chat/threads");
-      const billRes = await fetch("http://localhost:3001/payments");
+      const roomsRes = await fetch(API_BASE_URL + "/rooms");
+      const bookingsRes = await fetch(API_BASE_URL + "/bookings");
+      const announcementsRes = await fetch(API_BASE_URL + "/announcements");
+      const chatRes = await fetch(API_BASE_URL + "/chat/threads");
+      const billRes = await fetch(API_BASE_URL + "/payments");
 
       const roomsData = await roomsRes.json();
       const bookingsData = await bookingsRes.json();
@@ -226,13 +227,13 @@ export default function AdminDashboard() {
       };
 
       if (isEditing && editId) {
-        await fetch(`http://localhost:3001/rooms/${editId}`, {
+        await fetch(`${API_BASE_URL}/rooms/${editId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
       } else {
-        await fetch("http://localhost:3001/rooms", {
+        await fetch(API_BASE_URL + "/rooms", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -256,15 +257,17 @@ export default function AdminDashboard() {
 
   const handleLogout = () => {
     sessionStorage.removeItem("loggedInUser");
+    sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("loggedInRole");
     localStorage.removeItem("loggedInUser");
+    localStorage.removeItem("authToken");
     localStorage.removeItem("loggedInRole");
     router.replace("/login");
   };
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/messages`);
+      const res = await fetch(`${API_BASE_URL}/chat/threads/${chatKey}/messages`);
       const data = await res.json();
       setChatMessages(data);
       setSelectedChatKey(chatKey);
@@ -286,7 +289,7 @@ export default function AdminDashboard() {
         console.error("Missing admin ID for group chat creation");
         return;
       }
-      const res = await fetch("http://localhost:3001/chat/threads", {
+      const res = await fetch(API_BASE_URL + "/chat/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -331,7 +334,7 @@ export default function AdminDashboard() {
         console.error("Missing admin ID for direct chat request");
         return;
       }
-      const res = await fetch("http://localhost:3001/chat/threads", {
+      const res = await fetch(API_BASE_URL + "/chat/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -345,7 +348,7 @@ export default function AdminDashboard() {
       setChatThreads((prev) => [thread, ...prev.filter((t) => t.chatKey !== thread.chatKey)]);
       setSelectedChatKey(thread.chatKey);
       if (firstChatMessage.trim()) {
-        await fetch(`http://localhost:3001/chat/threads/${thread.chatKey}/messages`, {
+        await fetch(`${API_BASE_URL}/chat/threads/${thread.chatKey}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -369,7 +372,7 @@ export default function AdminDashboard() {
           "null",
       );
 
-      const res = await fetch("http://localhost:3001/announcements", {
+      const res = await fetch(API_BASE_URL + "/announcements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -388,7 +391,7 @@ export default function AdminDashboard() {
 
   const createBill = async () => {
     try {
-      const res = await fetch("http://localhost:3001/payments", {
+      const res = await fetch(API_BASE_URL + "/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(paymentForm),
@@ -424,7 +427,7 @@ export default function AdminDashboard() {
         return;
       }
 
-      const res = await fetch(`http://localhost:3001/chat/threads/${selectedChatKey}/messages`, {
+      const res = await fetch(`${API_BASE_URL}/chat/threads/${selectedChatKey}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -449,7 +452,7 @@ export default function AdminDashboard() {
 
   const deleteChatThread = async (chatKey: string) => {
     try {
-      await fetch(`http://localhost:3001/chat/threads/${chatKey}`, {
+      await fetch(`${API_BASE_URL}/chat/threads/${chatKey}`, {
         method: "DELETE",
       });
       setChatThreads((prev) => prev.filter((thread) => thread.chatKey !== chatKey));
@@ -510,7 +513,7 @@ export default function AdminDashboard() {
         }
       }
 
-      await fetch(`http://localhost:3001/bookings/${booking.id}`, {
+      await fetch(`${API_BASE_URL}/bookings/${booking.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -550,12 +553,21 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="rounded-2xl bg-red-600 px-5 py-3 font-semibold text-white shadow-lg shadow-red-200 transition hover:bg-red-700"
-          >
-            Logout
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/profile")}
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              My Profile
+            </button>
+            <button
+              onClick={handleLogout}
+              className="rounded-2xl bg-red-600 px-5 py-3 font-semibold text-white shadow-lg shadow-red-200 transition hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         <div className="mb-8 rounded-[2rem] border border-white/60 bg-white/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur-xl">
@@ -766,7 +778,7 @@ export default function AdminDashboard() {
 
                               try {
                                 await fetch(
-                                  `http://localhost:3001/rooms/${r.id}`,
+                                  `${API_BASE_URL}/rooms/${r.id}`,
                                   { method: "DELETE" }
                                 );
                                 refresh();
