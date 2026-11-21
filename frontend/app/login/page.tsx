@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiRequest } from "../lib/api";
 
 type ToastType = "success" | "error";
 
@@ -88,26 +89,20 @@ export default function LoginPage() {
               password: formData.password,
             };
 
-      const res = await fetch("http://localhost:3001/auth/login", {
+      const data = await apiRequest<{
+        accessToken: string;
+        user: { role: "student" | "admin" };
+      }>("/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-
-      if (
-        !res.ok ||
-        data.message === "User not found" ||
-        data.message === "Invalid password"
-      ) {
-        setErrors((prev) => ({
-          ...prev,
-          form: data.message || "Login failed",
-        }));
-        return;
+      if (!data.accessToken || !data.user) {
+        throw new Error("The server did not return a valid login session.");
       }
 
+      localStorage.setItem("authToken", data.accessToken);
+      sessionStorage.setItem("authToken", data.accessToken);
       localStorage.setItem("loggedInUser", JSON.stringify(data.user));
       localStorage.setItem("loggedInRole", data.user.role);
       sessionStorage.setItem("loggedInUser", JSON.stringify(data.user));
@@ -115,22 +110,20 @@ export default function LoginPage() {
 
       document.cookie = `user=${encodeURIComponent(
         JSON.stringify(data.user),
-      )}; path=/; max-age=86400`;
+      )}; path=/; max-age=28800; samesite=lax`;
 
       showToast("Log in successful!", "success");
 
-      setTimeout(() => {
-        if (data.user?.role === "admin") {
-          router.push("/admin/dashboard");
-        } else {
-          router.push("/rooms");
-        }
-      }, 900);
+      if (data.user.role === "admin") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/rooms");
+      }
     } catch (error) {
       console.error(error);
       setErrors((prev) => ({
         ...prev,
-        form: "Something went wrong",
+        form: error instanceof Error ? error.message : "Something went wrong",
       }));
     } finally {
       setLoading(false);
