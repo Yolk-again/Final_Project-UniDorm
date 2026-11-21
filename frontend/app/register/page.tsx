@@ -34,11 +34,9 @@ export default function RegisterPage() {
     null,
   );
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
-      if (redirectTimer.current) clearTimeout(redirectTimer.current);
       if (toastTimer.current) clearTimeout(toastTimer.current);
     };
   }, []);
