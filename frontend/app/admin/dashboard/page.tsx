@@ -803,6 +803,7 @@ export default function AdminDashboard() {
               </div>
             </section>
           </div>
+          </div>
         )}
 
         {adminView === "requests" && (
