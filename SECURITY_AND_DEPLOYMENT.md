@@ -19,11 +19,11 @@ Set these backend environment variables in the hosting provider:
 - `FRONTEND_URLS`: optional comma-separated additional frontend origins, such as preview domains.
 - `PORT`: supplied by many hosting providers; the backend uses it when present.
 
-Set this frontend environment variable before building the frontend:
+Set this frontend environment variable in the frontend hosting environment:
 
-- `NEXT_PUBLIC_API_URL`: the public HTTPS URL of the deployed backend, with no trailing slash.
+- `BACKEND_API_URL`: the deployed backend's public HTTPS URL, with no trailing slash.
 
-Redeploy the frontend after changing `NEXT_PUBLIC_API_URL`, because Next.js embeds public environment variables into the client build.
+The browser sends requests to the same-origin `/api-backend` path, and the Next.js rewrite proxies them to `BACKEND_API_URL`. Never configure `127.0.0.1` or `localhost` as the backend URL for a hosted frontend; those addresses point to each visitor's own device. Rebuild and redeploy the frontend after changing `BACKEND_API_URL`, because the rewrite destination is read by the Next.js server configuration.
 
 ## Account and session behaviour
 
