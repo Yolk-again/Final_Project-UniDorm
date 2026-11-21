@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "../lib/api";
+import { API_BASE_URL } from "../../lib/api";
 
 function hasUnreadThread(
   thread: any,
