@@ -1,7 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { JwtService } from "@nestjs/jwt";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { JwtAuthGuard } from "./jwt-auth.guard";
 
 describe("AuthController", () => {
   let controller: AuthController;
@@ -11,8 +11,8 @@ describe("AuthController", () => {
       controllers: [AuthController],
       providers: [
         {
-          provide: JwtAuthGuard,
-          useValue: { canActivate: jest.fn().mockReturnValue(true) },
+          provide: JwtService,
+          useValue: { verifyAsync: jest.fn().mockResolvedValue({ sub: 1, role: "admin" }) },
         },
         {
           provide: AuthService,
