@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiRequest } from "../lib/api";
 
 const STUDENT_PREFIX = "68306130";
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -131,24 +132,10 @@ export default function RegisterPage() {
               password: formData.password,
             };
 
-      const res = await fetch("http://localhost:3001/auth/register", {
+      const data = await apiRequest<{ adminId?: string }>("/auth/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json();
-      const message = Array.isArray(data?.message)
-        ? data.message.join(", ")
-        : data?.message;
-
-      if (!res.ok) {
-        setErrors((prev) => ({
-          ...prev,
-          form: message || "Registration failed",
-        }));
-        return;
-      }
 
       if (role === "admin" && data?.adminId) {
         setGeneratedAdminId(String(data.adminId));
@@ -161,7 +148,7 @@ export default function RegisterPage() {
       console.error(error);
       setErrors((prev) => ({
         ...prev,
-        form: "Something went wrong",
+        form: error instanceof Error ? error.message : "Something went wrong",
       }));
     } finally {
       setLoading(false);
