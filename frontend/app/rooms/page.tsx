@@ -902,7 +902,7 @@ export default function StudentPage() {
                                 )}
                               </div>
                             </div>
-                            {hasUnreadThread(thread, "student", chatReadTimes, selectedChatKey) && (
+                            {hasUnreadThread(thread, "student", chatReadTimes, selectedChatKey, studentId) && (
                               <span className="absolute right-4 top-4 h-3.5 w-3.5 rounded-full bg-red-500 ring-2 ring-white" />
                             )}
                           </button>
