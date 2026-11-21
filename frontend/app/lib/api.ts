@@ -1,5 +1,4 @@
-const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-export const API_BASE_URL = (configuredApiUrl || "http://localhost:3001").replace(/\/+$/, "");
+export const API_BASE_URL = "/api-backend";
 
 type ApiErrorBody = {
   message?: string | string[];
@@ -17,8 +16,11 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const requestUrl = `${API_BASE_URL}${normalizedPath}`;
+
   try {
-    const response = await fetch(`${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
+    const response = await fetch(requestUrl, {
       ...options,
       headers,
       signal: controller.signal,
@@ -38,11 +40,11 @@ export async function apiRequest<T>(
     return body as T;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("The server took too long to respond. Please try again.");
+      throw new Error("The UniDorm API request timed out. Check that the backend is running and the BACKEND_API_URL configuration is correct.");
     }
 
     if (error instanceof TypeError) {
-      throw new Error("Unable to reach the UniDorm server. Check your connection and API configuration.");
+      throw new Error("Unable to reach the UniDorm API through /api-backend. In local development, start the backend on port 3001. For deployment, configure BACKEND_API_URL to the public backend URL and redeploy the frontend.");
     }
 
     throw error;
