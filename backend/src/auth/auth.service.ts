@@ -107,7 +107,7 @@ export class AuthService {
       }
     }
 
-    const [existingEmail, existingStudent] = await Promise.all([
+    const [existingEmail, existingStudent, existingAdmins] = await Promise.all([
       this.prisma.user.findUnique({
         where: { email },
         select: { id: true },
@@ -118,6 +118,12 @@ export class AuthService {
             select: { id: true },
           })
         : Promise.resolve(null),
+      role === "admin"
+        ? this.prisma.user.findMany({
+            where: { role: "admin" },
+            select: { adminId: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     if (existingEmail) {
@@ -129,11 +135,6 @@ export class AuthService {
     }
 
     if (role === "admin") {
-      const existingAdmins = await this.prisma.user.findMany({
-        where: { role: "admin" },
-        select: { adminId: true },
-      });
-
       const usedAdminIds = new Set(
         existingAdmins.map((admin) => admin.adminId).filter(Boolean),
       );
