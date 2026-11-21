@@ -191,16 +191,6 @@ export default function StudentPage() {
     }
   };
 
-  useEffect(() => {
-    if (!authChecked || !studentId) return;
-
-    fetchRooms();
-    fetchBookings(studentId);
-    fetchAnnouncements();
-    fetchBills(studentId);
-    fetchChatThreads();
-  }, [authChecked, studentId]);
-
   const getRoomBookingStatus = (roomNumber: string) => {
     const roomBookings = allBookings.filter((b) => b.roomNumber === roomNumber);
 
@@ -280,12 +270,6 @@ export default function StudentPage() {
     }
   };
 
-  const handleHideBooking = (booking: any) => {
-    if (!hiddenBookingIds.includes(booking.id)) {
-      setHiddenBookingIds((prev) => [...prev, booking.id]);
-    }
-  };
-
   const visibleMyBookings = myBookings.filter(
     (b) => !hiddenBookingIds.includes(b.id),
   );
@@ -328,6 +312,17 @@ export default function StudentPage() {
       console.error("Failed to fetch chat threads:", error);
     }
   };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!authChecked || !studentId) return;
+
+    fetchRooms();
+    fetchBookings(studentId);
+    fetchAnnouncements();
+    fetchBills(studentId);
+    fetchChatThreads();
+  }, [authChecked, studentId]);
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
