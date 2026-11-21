@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "../lib/api";
 
 function normalizeGender(value?: string) {
   const gender = String(value ?? "").trim().toLowerCase();
@@ -171,7 +172,7 @@ export default function StudentPage() {
 
   const fetchRooms = async () => {
     try {
-      const res = await fetch("http://localhost:3001/rooms");
+      const res = await fetch(API_BASE_URL + "/rooms");
       const data = await res.json();
       setRooms(data);
     } catch (error) {
@@ -181,7 +182,7 @@ export default function StudentPage() {
 
   const fetchBookings = async (id: string) => {
     try {
-      const res = await fetch("http://localhost:3001/bookings");
+      const res = await fetch(API_BASE_URL + "/bookings");
       const data = await res.json();
       setAllBookings(data);
       setMyBookings(data.filter((b: any) => b.studentId === id));
@@ -253,7 +254,7 @@ export default function StudentPage() {
     if (studentHasActiveBooking) return;
 
     try {
-      const res = await fetch("http://localhost:3001/bookings", {
+      const res = await fetch(API_BASE_URL + "/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -291,7 +292,7 @@ export default function StudentPage() {
 
   const fetchAnnouncements = async () => {
     try {
-      const res = await fetch("http://localhost:3001/announcements");
+      const res = await fetch(API_BASE_URL + "/announcements");
       const data = await res.json();
       const normalizedGender = studentGender.toUpperCase();
       const filtered = Array.isArray(data)
@@ -309,7 +310,7 @@ export default function StudentPage() {
 
   const fetchBills = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/payments/${id}`);
+      const res = await fetch(`${API_BASE_URL}/payments/${id}`);
       const data = await res.json();
       setBills(data);
     } catch (error) {
@@ -319,7 +320,7 @@ export default function StudentPage() {
 
   const fetchChatThreads = async () => {
     try {
-      const res = await fetch("http://localhost:3001/chat/threads");
+      const res = await fetch(API_BASE_URL + "/chat/threads");
       const data = await res.json();
       setChatThreads(data);
       setChatsLoaded(true);
@@ -330,7 +331,7 @@ export default function StudentPage() {
 
   const fetchChatMessages = async (chatKey: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/messages`);
+      const res = await fetch(`${API_BASE_URL}/chat/threads/${chatKey}/messages`);
       const data = await res.json();
       setChatMessages(data);
       setSelectedChatKey(chatKey);
@@ -349,7 +350,7 @@ export default function StudentPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${selectedChatKey}/messages`, {
+      const res = await fetch(`${API_BASE_URL}/chat/threads/${selectedChatKey}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -375,7 +376,7 @@ export default function StudentPage() {
 
   const handleRespondRequest = async (chatKey: string, action: "accept" | "deny") => {
     try {
-      const res = await fetch(`http://localhost:3001/chat/threads/${chatKey}/respond`, {
+      const res = await fetch(`${API_BASE_URL}/chat/threads/${chatKey}/respond`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
@@ -397,7 +398,7 @@ export default function StudentPage() {
 
   const handleDeleteBooking = async (bookingId: number) => {
     try {
-      const res = await fetch(`http://localhost:3001/bookings/${bookingId}`, {
+      const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -423,7 +424,7 @@ export default function StudentPage() {
   }, [view, announcements, announcementReadIds]);
   const handlePayBill = async (billId: number) => {
     try {
-      const res = await fetch(`http://localhost:3001/payments/${billId}/pay`, {
+      const res = await fetch(`${API_BASE_URL}/payments/${billId}/pay`, {
         method: "PATCH",
       });
       if (!res.ok) {
@@ -451,8 +452,10 @@ export default function StudentPage() {
 
   const handleLogout = () => {
     sessionStorage.removeItem("loggedInUser");
+    sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("loggedInRole");
     localStorage.removeItem("loggedInUser");
+    localStorage.removeItem("authToken");
     localStorage.removeItem("loggedInRole");
     router.replace("/");
   };
@@ -555,6 +558,13 @@ export default function StudentPage() {
               </button>
             </div>
 
+            <button
+              type="button"
+              onClick={() => router.push("/profile")}
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              My Profile
+            </button>
             <button
               onClick={handleLogout}
               className="rounded-2xl bg-red-600 px-5 py-3 font-semibold text-white shadow-lg shadow-red-200 transition hover:bg-red-700"
